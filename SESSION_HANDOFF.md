@@ -1,55 +1,40 @@
 # Session Handoff
 
 ## Completed In This Session
-**T6 — Upload pipeline skeleton (multipart → MinIO → Postgres).** Authenticated users can upload image/audio/video bytes; the API writes an object to the configured S3-compatible bucket and persists `Asset` + primary `AssetVersion` rows (no worker queue, no ffprobe/Pillow metadata yet).
+**T7 — Dramatiq + Redis broker + enqueue from API.** Successful uploads enqueue a `extract_asset_version_metadata` message on queue `media`; the worker runs a **stub** actor that logs the `asset_version_id` (real ffprobe/Pillow/mutagen + DB updates land in **T8**).
 
-- **Config**
-  - `app/core/config.py`: `S3_ENDPOINT_URL`, `S3_ACCESS_KEY`, `S3_SECRET_KEY`, `S3_BUCKET`, `S3_REGION`, `S3_USE_SSL`, `API_UPLOAD_MAX_BYTES`.
-- **Storage**
-  - `app/storage/s3.py`: aioboto3 `put_object` with **path-style** URLs for MinIO compatibility.
-- **HTTP**
-  - `POST /api/v1/assets`: multipart form (`file` required; optional `title`, `description`, `captured_at`). Returns **201** with `{ asset, version }`.
-- **Deps**
-  - `apps/api/requirements.txt`: `aioboto3`, `python-multipart`.
-- **Docs**
-  - `.env.example`: optional `API_UPLOAD_MAX_BYTES` comment.
+- **API**
+  - `dramatiq[redis]`; `app/core/config.py` — `REDIS_*`, `redis_url`.
+  - `app/dramatiq_broker.py` — `RedisBroker` + `dramatiq.set_broker`.
+  - `app/tasks_media.py` — producer-side actor declaration (`actor_name` + `queue_name` aligned with worker).
+  - `app/main.py` — import broker + tasks **before** routers.
+  - `app/api/v1/assets.py` — `extract_asset_version_metadata.send(...)` after commit; enqueue errors logged only (HTTP **201** unchanged).
+- **Worker**
+  - `app/tasks_media.py` — stub implementation (`logging`).
+  - `app/main.py` — import `tasks_media` after broker setup.
 
 ## Test Summary
-- `python3 -m compileall -q apps/api/app` — OK.
-- `docker compose build api && docker compose up -d api` — OK (infra already running locally).
-- `POST /api/v1/auth/register` → `POST /api/v1/assets` with a minimal PNG → **201**; response includes `version.storage_key` shaped like `{owner_uuid}/{asset_uuid}/{version_uuid}.png`, `mime_type`, `size_bytes`, empty `media_metadata`.
-- Invalid Bearer → **401** on upload.
-- `text/plain` upload → **415**.
+- `python3 -m compileall -q apps/api/app apps/worker/app` — OK.
+- `docker compose build api worker && docker compose up -d api worker` — OK.
+- `POST /api/v1/assets` after register → **201**; worker log line: `[worker] extract_asset_version_metadata (stub): asset_version_id=…`.
 
 ## How To Test (repeatable)
-1. Ensure stack is up and migrations applied:  
-   `docker compose up -d postgres redis minio api`  
-   `docker compose exec api alembic upgrade head`
-2. Register + upload:
-   ```bash
-   EMAIL="you-$(date +%s)@example.com"
-   TOK=$(curl -sS -X POST http://localhost:8000/api/v1/auth/register \
-     -H 'Content-Type: application/json' \
-     -d "{\"email\":\"$EMAIL\",\"password\":\"password123\",\"display_name\":\"Uploader\"}" \
-     | python3 -c "import sys,json; print(json.load(sys.stdin)['access_token'])")
-   curl -sS -X POST http://localhost:8000/api/v1/assets \
-     -H "Authorization: Bearer $TOK" \
-     -F 'file=@/path/to/photo.jpg;type=image/jpeg'
-   ```
-3. Confirm the object exists in MinIO (Console http://localhost:9001 or `mc` against the `family-media` bucket using keys from the JSON).
+1. `docker compose up -d postgres redis minio api worker`  
+   `docker compose exec api alembic upgrade head` (fresh volumes).
+2. Register + upload as in T6; then:  
+   `docker compose logs worker --tail 30 | grep extract_asset_version_metadata`
 
 ## Current Stack State
-Typical local compose: postgres/redis/minio healthy; API rebuilt with aioboto3; worker/web unchanged by this task.
+API + worker rebuilt with Dramatiq; Redis broker shared via Compose `REDIS_*` on both services.
 
 ## Known Issues / Risks
-- **Orphan objects**: if Postgres `commit` fails after a successful `put_object`, the blob may remain in MinIO without a referencing row (unlikely; no compensating delete in T6).
-- **MIME trust**: `AssetType` is inferred from client-supplied `Content-Type`; deep sniffing / extension policies are out of scope for this skeleton.
-- **`logger.exception` on 502**: logs stack traces for storage failures — acceptable for ops; ensure prod log redaction policies later.
-- Fresh DB volumes still require `docker compose exec api alembic upgrade head`.
+- **Enqueue–commit ordering**: message is sent only **after** DB commit; if Redis is down, the asset exists but metadata extraction never runs until a manual re-queue strategy exists (out of scope for T7).
+- **Duplicate actor definitions**: API and worker both declare the actor with the same `actor_name` / `queue_name` — keep them in sync or extract a shared package later.
+- **Stub logging**: worker uses standard logging at INFO; tune Dramatiq/log level in prod as needed.
 
 ## Next Recommended Task
-**T7 — Dramatiq + Redis enqueue from API** so uploads can trigger async metadata extraction in T8.
+**T8 — Media metadata extraction** — worker downloads from MinIO, runs ffmpeg/Pillow/mutagen, updates `asset_versions.metadata` / dimensions / duration.
 
 ## Notes For Next Session
 - Read `CURSOR_EXECUTION_MODE.md` + `.ai/*.json` first.
-- Keep enqueue narrowly scoped: fire-after-commit pattern preferred to avoid orphan messages vs orphan rows.
+- Prefer async DB/session patterns carefully inside Dramatiq actors (sync engine or `asyncio.run` boundaries — decide one consistent approach in T8).

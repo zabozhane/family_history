@@ -4,8 +4,14 @@ from __future__ import annotations
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api.v1.router import api_router
 from app.core.config import settings
+
+# Broker + actor declarations must load before routes import ``tasks_media``
+# transitively via upload handlers.
+from app import dramatiq_broker  # noqa: F401
+from app import tasks_media  # noqa: F401
+
+from app.api.v1.router import api_router
 
 app: FastAPI = FastAPI(
     title="Family Media System API",

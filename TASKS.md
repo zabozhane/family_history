@@ -201,9 +201,9 @@ Tested:
 - Bogus Bearer token on upload → **401**.
 - `text/plain` upload → **415**.
 
-## T7 — Set up Dramatiq task queue using Redis broker
+## T7 — Set up Dramatiq task queue using Redis broker  [DONE]
 Priority: Medium
-Status: Pending — next recommended task
+Status: Done (session 7)
 
 Integrate Dramatiq with Redis for async task processing in worker app and connect worker to API for enqueuing media metadata extraction jobs.
 
@@ -211,8 +211,24 @@ Depends on:
 - T3
 - T5
 
+Completion note:
+- `apps/api/requirements.txt`: `dramatiq[redis]` (producer).
+- `app/core/config.py`: `REDIS_HOST` / `REDIS_PORT` / `REDIS_DB` + `redis_url` for `RedisBroker`.
+- `app/dramatiq_broker.py`: API process sets global Dramatiq broker (matches Compose `REDIS_*` env already passed to `api`).
+- `app/tasks_media.py` (API): declares `extract_asset_version_metadata` with explicit `actor_name` + `queue_name="media"` for stable cross-process routing.
+- `apps/worker/app/tasks_media.py`: consumer stub — logs `asset_version_id`; T8 replaces body with real extraction + DB writes.
+- `apps/worker/app/main.py`: imports `tasks_media` after broker init so Dramatiq registers the actor.
+- `app/main.py`: imports `dramatiq_broker` + `tasks_media` **before** `api_router` so actors exist before route modules load.
+- `app/api/v1/assets.py`: after successful DB commit on upload, `extract_asset_version_metadata.send(str(version.id))`; enqueue failures are logged and do **not** fail the HTTP response (upload already persisted).
+
+Tested:
+- `python3 -m compileall -q apps/api/app apps/worker/app` — OK.
+- `docker compose build api worker && docker compose up -d api worker` — OK.
+- Register → `POST /api/v1/assets` (tiny PNG) → **201**; `docker compose logs worker` shows `[worker] extract_asset_version_metadata (stub): asset_version_id=<uuid>`.
+
 ## T8 — Implement media metadata extraction background jobs
 Priority: Medium
+Status: Pending — next recommended task
 
 Develop worker tasks to fetch uploaded media from MinIO, extract metadata using ffmpeg, Pillow, mutagen, and update AssetVersion metadata in the database.
 

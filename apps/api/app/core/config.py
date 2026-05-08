@@ -49,6 +49,16 @@ class Settings(BaseSettings):
     # Upload limits (skeleton — tighten per env in prod).
     API_UPLOAD_MAX_BYTES: int = Field(default=102_400_000)
 
+    # --- Redis (Dramatiq broker — T7+) ---
+    REDIS_HOST: str = Field(default="redis")
+    REDIS_PORT: int = Field(default=6379)
+    REDIS_DB: int = Field(default=0)
+
+    @property
+    def redis_url(self) -> str:
+        """Dramatiq ``RedisBroker`` DSN (no auth — matches local Compose redis)."""
+        return f"redis://{self.REDIS_HOST}:{self.REDIS_PORT}/{self.REDIS_DB}"
+
     @property
     def database_url_async(self) -> str:
         """asyncpg DSN used by the application + Alembic env.py."""

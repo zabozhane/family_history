@@ -17,6 +17,7 @@ from app.db.models.asset_version import AssetVersion
 from app.db.models.user import User
 from app.schemas.asset import AssetUploadResponse
 from app.storage.s3 import put_object
+from app.tasks_media import extract_asset_version_metadata
 
 logger = logging.getLogger(__name__)
 
@@ -155,4 +156,13 @@ async def upload_asset(
     await db.commit()
     await db.refresh(asset)
     await db.refresh(version)
+
+    try:
+        extract_asset_version_metadata.send(str(version.id))
+    except Exception:
+        logger.exception(
+            "Failed to enqueue extract_asset_version_metadata for version_id=%s",
+            version.id,
+        )
+
     return AssetUploadResponse(asset=asset, version=version)
