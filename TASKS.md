@@ -174,17 +174,36 @@ Open questions to revisit in T12 proper:
 - Re-issue server-side refresh-rotation / revocation list.
 - Generate TS types from OpenAPI instead of hand-mirroring.
 
-## T6 — Create upload pipeline skeleton for media assets  [IN PROGRESS]
+## T6 — Create upload pipeline skeleton for media assets  [DONE]
 Priority: Medium
-Status: Pending — next recommended task
+Status: Done (session 6)
 
 Implement API endpoints to accept image/audio/video uploads, save files in MinIO storage, store metadata placeholder in database, and create Asset and AssetVersion records.
 
 Depends on:
 - T5
 
+Completion note:
+- `apps/api/requirements.txt`: `aioboto3`, `python-multipart`.
+- `app/core/config.py`: `S3_*` settings aligned with Compose / `.env.example`, plus `API_UPLOAD_MAX_BYTES` (default ~100MB).
+- `app/storage/s3.py`: async `put_object` via aioboto3 + path-style addressing for MinIO.
+- `app/schemas/asset.py`: `AssetRead`, `AssetVersionRead`, `AssetUploadResponse`.
+- `app/api/v1/assets.py`: `POST /api/v1/assets` — multipart `file`, optional `title`/`description`/`captured_at` (ISO 8601); MIME→`AssetType` for `image/*`, `video/*`, `audio/*` only (**415** otherwise); storage key `{owner_id}/{asset_id}/{version_id}{suffix}`; `permission_scope` default **private**; `flush` → MinIO `put_object` → `commit`, rollback DB on storage failure (**502**).
+- `app/api/v1/router.py`: mounts assets router at `/assets`.
+- `.env.example`: commented hint for optional `API_UPLOAD_MAX_BYTES`.
+- **Out of scope (by plan):** Dramatiq enqueue (T7), metadata extraction (T8).
+
+Tested:
+- `python3 -m compileall -q apps/api/app` — OK.
+- `docker compose build api && docker compose up -d api` — OK.
+- OpenAPI (`/docs`): `POST /api/v1/assets` under tag **assets**.
+- Register → `POST /api/v1/assets` with tiny PNG (`Content-Type: image/png`) → **201**; JSON returns nested `asset` + `version` with `storage_key`, `mime_type`, `size_bytes`, empty `media_metadata`, null width/height/duration.
+- Bogus Bearer token on upload → **401**.
+- `text/plain` upload → **415**.
+
 ## T7 — Set up Dramatiq task queue using Redis broker
 Priority: Medium
+Status: Pending — next recommended task
 
 Integrate Dramatiq with Redis for async task processing in worker app and connect worker to API for enqueuing media metadata extraction jobs.
 

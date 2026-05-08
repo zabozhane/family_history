@@ -38,6 +38,17 @@ class Settings(BaseSettings):
         default_factory=lambda: ["http://localhost:3000"]
     )
 
+    # --- S3-compatible storage (MinIO locally) ---
+    S3_ENDPOINT_URL: str = Field(default="http://minio:9000")
+    S3_ACCESS_KEY: str = Field(default="minioadmin")
+    S3_SECRET_KEY: str = Field(default="minioadmin")
+    S3_BUCKET: str = Field(default="family-media")
+    S3_REGION: str = Field(default="us-east-1")
+    S3_USE_SSL: bool = Field(default=False)
+
+    # Upload limits (skeleton — tighten per env in prod).
+    API_UPLOAD_MAX_BYTES: int = Field(default=102_400_000)
+
     @property
     def database_url_async(self) -> str:
         """asyncpg DSN used by the application + Alembic env.py."""
