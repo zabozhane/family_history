@@ -1,0 +1,31 @@
+{
+  "project_name": "Family Media System / Digital Memory Platform",
+  "idea": "A private, multi-user family media and digital memory platform unifying photos, music, videos, notes, events, and more into a timeline-centered personal cloud system. Everything is an asset, and all assets happen in time, supporting permissions and family-oriented sharing.",
+  "preferred_stack": "Frontend: Next.js, TypeScript, Tailwind, shadcn/ui; Backend: Python, FastAPI; Database: PostgreSQL; Cache/Queue: Redis; Background Jobs: Dramatiq or Celery; Storage: S3-compatible (MinIO for local); ORM: SQLAlchemy; Auth: JWT + refresh tokens; Media Processing: ffmpeg, Pillow, mutagen; Containerization: Docker, docker-compose",
+  "constraints": [
+    "minimal mvp"
+  ],
+  "goals": [
+    "Establish modular project structure with apps/web/api/worker directories",
+    "Set up Docker and docker-compose for local development with PostgreSQL, Redis, MinIO",
+    "Implement core domain models: User, Asset, AssetVersion, TimelineEntry with DB schemas and migrations",
+    "Build secure JWT-based authentication system with user roles (admin, family member, child, guest)",
+    "Create upload pipeline skeleton supporting image/audio/video uploads storing metadata and files in object storage",
+    "Develop foundational timeline model that aggregates assets/events for unified timeline view",
+    "Develop typed, RESTful, versioned FastAPI backend with OpenAPI docs",
+    "Implement frontend shell in Next.js with Tailwind supporting authentication, media browsing, and timeline navigation",
+    "Implement basic media browsing: photo gallery, music playback, timeline filtering",
+    "Implement permissions system supporting private, family, shared scopes",
+    "Set up async task processing for media metadata extraction and background jobs",
+    "Ensure strict typing, environment config, and clean code structure throughout"
+  ],
+  "non_goals": [
+    "No advanced AI features like embeddings or semantic search in MVP",
+    "No microservices or Kubernetes orchestration in MVP",
+    "No full media transcoding, waveform generation, or complex media editing features initially",
+    "No social networking, enterprise features, or large-scale distributed systems",
+    "No implementing command palette or drag & drop uploads at MVP",
+    "No storing files inside the database",
+    "No overengineering or excessive abstraction beyond modular monolith"
+  ]
+}

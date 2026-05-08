@@ -1,0 +1,145 @@
+{
+  "tasks": [
+    {
+      "id": "T1",
+      "title": "Establish modular project directory structure",
+      "description": "Create the base project repository structure with separate directories for apps/web/api/worker, including placeholder files to confirm setup.",
+      "priority": "High",
+      "depends_on": []
+    },
+    {
+      "id": "T2",
+      "title": "Create Dockerfiles for api, web, and worker apps",
+      "description": "Develop Dockerfiles to containerize the api (FastAPI), web (Next.js), and worker (background jobs) components with appropriate base images and dependencies.",
+      "priority": "High",
+      "depends_on": [
+        "T1"
+      ]
+    },
+    {
+      "id": "T3",
+      "title": "Set up docker-compose with PostgreSQL, Redis, and MinIO",
+      "description": "Configure docker-compose to orchestrate containers for PostgreSQL database, Redis cache/queue, MinIO S3-compatible storage, and the three app containers (api, web, worker).",
+      "priority": "High",
+      "depends_on": [
+        "T1",
+        "T2"
+      ]
+    },
+    {
+      "id": "T4",
+      "title": "Implement core database schemas with SQLAlchemy and Alembic migrations",
+      "description": "Define core domain models User, Asset, AssetVersion, TimelineEntry in SQLAlchemy and create Alembic migrations to set up initial tables in PostgreSQL.",
+      "priority": "High",
+      "depends_on": [
+        "T3"
+      ]
+    },
+    {
+      "id": "T5",
+      "title": "Implement JWT authentication with user roles in FastAPI backend",
+      "description": "Develop JWT-based authentication with refresh tokens, including user roles (admin, family member, child, guest) and role-based access control middleware for API endpoints.",
+      "priority": "High",
+      "depends_on": [
+        "T4"
+      ]
+    },
+    {
+      "id": "T6",
+      "title": "Create upload pipeline skeleton for media assets",
+      "description": "Implement API endpoints to accept image/audio/video uploads, save files in MinIO storage, store metadata placeholder in database, and create Asset and AssetVersion records.",
+      "priority": "Medium",
+      "depends_on": [
+        "T5"
+      ]
+    },
+    {
+      "id": "T7",
+      "title": "Set up Dramatiq task queue using Redis broker",
+      "description": "Integrate Dramatiq with Redis for async task processing in worker app and connect worker to API for enqueuing media metadata extraction jobs.",
+      "priority": "Medium",
+      "depends_on": [
+        "T3",
+        "T5"
+      ]
+    },
+    {
+      "id": "T8",
+      "title": "Implement media metadata extraction background jobs",
+      "description": "Develop worker tasks to fetch uploaded media from MinIO, extract metadata using ffmpeg, Pillow, mutagen, and update AssetVersion metadata in the database.",
+      "priority": "Medium",
+      "depends_on": [
+        "T6",
+        "T7"
+      ]
+    },
+    {
+      "id": "T9",
+      "title": "Develop permission system for private, family, shared scopes",
+      "description": "Implement framework in API backend to check and enforce asset permissions based on scopes for users across all relevant endpoints.",
+      "priority": "Medium",
+      "depends_on": [
+        "T5"
+      ]
+    },
+    {
+      "id": "T10",
+      "title": "Build typed, versioned FastAPI RESTful API with OpenAPI docs",
+      "description": "Define typed API endpoints for authentication, media upload, timeline retrieval, permission checks, and document API versions with OpenAPI specification.",
+      "priority": "High",
+      "depends_on": [
+        "T5",
+        "T6",
+        "T9"
+      ]
+    },
+    {
+      "id": "T11",
+      "title": "Implement foundational timeline aggregation model",
+      "description": "Develop backend logic to aggregate Assets, AssetVersions, and TimelineEntries into a unified timeline view respecting permissions and filter criteria.",
+      "priority": "Medium",
+      "depends_on": [
+        "T4",
+        "T9"
+      ]
+    },
+    {
+      "id": "T12",
+      "title": "Create Next.js frontend shell with authentication integration",
+      "description": "Implement frontend authentication flows using JWT tokens from API, including login, logout, and protected routes with Tailwind and shadcn/ui components.",
+      "priority": "High",
+      "depends_on": [
+        "T10"
+      ]
+    },
+    {
+      "id": "T13",
+      "title": "Implement basic photo gallery and music playback",
+      "description": "Develop UI components for browsing photo gallery and playing music tracks with basic playback controls consuming API data.",
+      "priority": "Medium",
+      "depends_on": [
+        "T12",
+        "T10"
+      ]
+    },
+    {
+      "id": "T14",
+      "title": "Implement timeline navigation and filtering UI",
+      "description": "Develop frontend timeline view with filtering by time ranges and asset types, integrating API timeline endpoints and updating UI accordingly.",
+      "priority": "Medium",
+      "depends_on": [
+        "T12",
+        "T11"
+      ]
+    },
+    {
+      "id": "T15",
+      "title": "Implement environment configuration and strict typing across codebase",
+      "description": "Ensure all components (api, web, worker) use environment variables for config and enforce TypeScript/Python strict typing for code quality.",
+      "priority": "Medium",
+      "depends_on": [
+        "T1"
+      ]
+    }
+  ]
+}

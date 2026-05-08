@@ -1,0 +1,63 @@
+{
+  "overview": "A modular monolith architecture for a private family media system enabling secure multi-user media asset management and timeline aggregation. The system comprises frontend, API backend, and asynchronous worker modules with tight integration and explicit responsibilities, adhering to minimal MVP constraints and preferred stack.",
+  "components": [
+    {
+      "name": "web",
+      "purpose": "Next.js frontend shell providing user interface for authentication, media browsing, and timeline navigation.",
+      "responsibilities": [
+        "Implement authentication UI flows integrating JWT tokens",
+        "Display photo gallery and music player with basic playback controls",
+        "Enable timeline filtering and navigation by time and asset type",
+        "Consume versioned RESTful API endpoints securely",
+        "Maintain clean UI with Tailwind and shadcn/ui components"
+      ]
+    },
+    {
+      "name": "api",
+      "purpose": "FastAPI backend serving typed, versioned RESTful API endpoints orchestrating core business logic.",
+      "responsibilities": [
+        "Define and manage core domain models: User, Asset, AssetVersion, TimelineEntry with SQLAlchemy and Alembic migrations",
+        "Implement JWT + refresh token authentication with role-based access control",
+        "Provide endpoints for media upload initiation and metadata retrieval",
+        "Aggregate timeline entries for unified timeline views respecting permissions",
+        "Implement permission system respecting private, family, shared scopes",
+        "Expose OpenAPI documentation for client integration",
+        "Validate and enforce strict typing and environment-based configuration"
+      ]
+    },
+    {
+      "name": "worker",
+      "purpose": "Background task processing service handling asynchronous media metadata extraction and maintenance jobs.",
+      "responsibilities": [
+        "Process uploaded media files for metadata extraction using ffmpeg, Pillow, mutagen",
+        "Perform background jobs such as updating AssetVersion thumbnails or caching metadata",
+        "Integrate with Redis as broker for Dramatiq or Celery for task queueing",
+        "Report processing status to API for user visibility",
+        "Ensure fault tolerance and logging within task execution"
+      ]
+    },
+    {
+      "name": "infrastructure",
+      "purpose": "Local development environment provisioning and service orchestration via Docker and docker-compose.",
+      "responsibilities": [
+        "Provision PostgreSQL database with initial schemas and migrations",
+        "Provision Redis instance for caching and task queue broker",
+        "Provision MinIO as S3-compatible object storage for media files",
+        "Manage Dockerfiles for api, web, and worker apps",
+        "Orchestrate docker-compose setup for seamless local startup and networking",
+        "Configure environment variables for inter-service connectivity and secrets management"
+      ]
+    }
+  ],
+  "data_flow": [
+    "User accesses web frontend and performs login, frontend obtains JWT token from API",
+    "Frontend requests timeline data and media browsing data from the API using JWT authentication",
+    "User uploads images/audio/video via web UI submitting to API upload endpoint",
+    "API receives upload metadata, temporarily stores file in MinIO storage, creates Asset and AssetVersion records",
+    "API enqueues background metadata extraction task to Redis queue consumed by worker",
+    "Worker fetches uploaded media from MinIO, extracts metadata (e.g., image dimensions, audio tags) and updates database records",
+    "API aggregates AssetVersions and TimelineEntries querying PostgreSQL respecting user permissions to serve to frontend",
+    "User interacts with timeline UI in web, frontend requests filtered timeline entries with API",
+    "Auth system on API verifies JWT tokens and enforces role-based and permission scope access throughout API calls"
+  ]
+}
