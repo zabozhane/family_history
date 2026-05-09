@@ -48,6 +48,18 @@ async def iter_object_chunks(key: str, chunk_size: int = 65536) -> AsyncIterator
             yield chunk
 
 
+async def delete_object(key: str) -> None:
+    """Remove object from bucket; ignores missing key."""
+    async with _session.client("s3", **_client_kwargs()) as client:
+        try:
+            await client.delete_object(Bucket=settings.S3_BUCKET, Key=key)
+        except ClientError as exc:
+            code = exc.response.get("Error", {}).get("Code", "")
+            if code in ("404", "NoSuchKey", "NotFound"):
+                return
+            raise
+
+
 async def head_object_exists(key: str) -> bool:
     """Return True if the object exists (False for missing key)."""
     async with _session.client("s3", **_client_kwargs()) as client:

@@ -1,28 +1,30 @@
 # Session Handoff
 
 ## Completed In This Session
-**Gallery UX trim + API list hydration fix.**
+**T22 — Music library UX + upload title from filename.**
 
-- **Photos upload form**: only **file** + **who can see it** (removed title / capture date / description).
-- **T21 / API**: **`GET /api/v1/assets`** now attaches **`primary_version`** reliably via explicit **`asset_versions`** query + **`serialize_asset_read(..., version_rows=…)`**; **`_load_asset_with_versions`** uses **`set_committed_value`** so **`GET /{id}`** and **`/file`** keep working — fixes **No file** thumbnails after upload.
+- **`/music`**: compact **multi-file** upload; **Spotify-like** bottom player (**`music-player-bar.tsx`**) — shuffle, repeat modes, scrubbing, volume; removed unused Lyrics/Queue/extra icons per layout trim.
+- **Row actions**: **Play/Pause** icons; **delete** with modal (**«Вы действительно хотите удалить этот трек?»**).
+- **API**: **`DELETE /api/v1/assets/{id}`** (owner/admin); **`delete_object`** in **`storage/s3.py`**.
+- **Titles**: **`_resolved_asset_title`** — if multipart **`title`** is omitted, **`Asset.title`** = filename stem (music, photos, all uploads).
+- **Docker**: dropped **`# syntax=docker/dockerfile:1.7`** from app Dockerfiles (avoids Hub pull for Dockerfile frontend).
 
-Convention: **`TASKS.md`** **`T21`** + this file.
+Convention: **`TASKS.md`** **`T22`** + this file.
 
 ## Test Summary
-- Python **`assets.py`** AST parse — OK.
-- **`npm run build`** in **`apps/web`** — OK.
+- **`npm run typecheck`** (**`apps/web`**) — OK.
 
 ## How To Test (repeatable)
-- **`docker compose build api web && docker compose up -d`**, upload on **`/gallery`** → thumbnails load (**`/api/fms/v1/assets/{id}/file`**).
+- **`docker compose build api web && docker compose up -d`** → **`/music`**: upload multiple files → titles match filenames (without extension); play/scrub/delete.
 
 ## Current Stack State
-Through **T21** in **`TASKS.md`** (incremental fixes after **T18**).
+Through **T22** in **`TASKS.md`**.
 
 ## Known Issues / Risks
 - BFF **401 refresh** + multipart replay unchanged.
 
 ## Next Recommended Task
-Backlog polish (music upload parity, dashboard **`limit`** / date filters).
+Timeline polish, gallery parity, or worker metadata for nicer duration labels.
 
 ## Notes For Next Session
 - None.

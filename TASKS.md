@@ -542,3 +542,27 @@ Completion note:
 
 Tested:
 - Python AST parse **`assets.py`** — OK; **`npm run build`** (**`apps/web`**) — OK.
+
+## T22 — Music library: Spotify-style player, multi-upload, delete, filename titles  [DONE]
+Priority: Medium
+Status: Done
+
+Deliver a full **`/music`** experience: compact upload of multiple audio files, bottom player styled like Spotify (transport, scrubbable progress, volume, shuffle/repeat), list rows with icon play/pause and delete with confirmation; **`DELETE /api/v1/assets/{id}`** for owners/admins; default **`Asset.title`** from uploaded filename when the multipart **`title`** field is omitted.
+
+Depends on:
+- T13 (basic music playback)
+- T21 (asset list / file routes stable)
+
+Completion note:
+- **`apps/web`**: **`music-upload-form.tsx`** — compact toolbar (no large card), **`multiple`** file input, sequential **`POST /api/v1/assets`** per file; **`music-player-bar.tsx`** — dark pill UI (**`lucide-react`** icons), hidden native `<audio controls>` replaced by custom scrubber + volume; **`music/page.tsx`** — footer player, shuffle/next randomization when shuffle on, repeat one/all/off, Russian delete confirm modal, row **Play/Pause** + **Trash** icons.
+- **`apps/web/lib/api.ts`**: **`apiDeleteAsset`** (`DELETE` via BFF).
+- **`apps/api`**: **`DELETE /api/v1/assets/{id}`** — delete MinIO keys then **`Asset`** row; **`delete_object`** in **`storage/s3.py`**; **`_resolved_asset_title`** — if **`title`** Form empty, use **`PurePosixPath(filename).stem`** (applies to image/audio/video uploads without explicit title).
+- **`docker-compose.yml`**: **`api`** **`depends_on`** **`minio-init`** **`service_completed_successfully`** (fresh stacks get bucket before API).
+- **`apps/*/Dockerfile`**: removed **`# syntax=docker/dockerfile:1.7`** so builds do not require pulling the Dockerfile frontend image from Docker Hub.
+
+Completion criteria (DoD):
+- Upload several tracks at once; they appear in the list with titles derived from filenames.
+- Play from list or footer; scrub works; delete asks for confirmation and removes track + storage.
+
+Tested:
+- **`npm run typecheck`** in **`apps/web`** — OK.

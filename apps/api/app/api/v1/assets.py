@@ -9,8 +9,8 @@ from uuid import UUID, uuid4
 
 from botocore.exceptions import BotoCoreError, ClientError
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile, status
-from fastapi.responses import StreamingResponse
-from sqlalchemy import select
+from fastapi.responses import Response, StreamingResponse
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm.attributes import set_committed_value
 
@@ -22,7 +22,7 @@ from app.db.models.timeline_entry import TimelineEntry, TimelineEntryKind
 from app.db.models.user import User, UserRole
 from app.permissions.assets import asset_read_filter_for_user, can_read_asset
 from app.schemas.asset import AssetPermissionRead, AssetRead, AssetUploadResponse, AssetVersionRead
-from app.storage.s3 import head_object_exists, iter_object_chunks, put_object
+from app.storage.s3 import delete_object, head_object_exists, iter_object_chunks, put_object
 from app.tasks_media import extract_asset_version_metadata
 
 logger = logging.getLogger(__name__)
@@ -67,6 +67,17 @@ def _suffix_from_upload(filename: str | None, mime: str) -> str:
         if suf and len(suf) <= 12:
             return suf
     return _MIME_TO_EXT.get(mime, ".bin")
+
+
+def _resolved_asset_title(title: str | None, filename: str | None) -> str | None:
+    """Use explicit Form title when provided; otherwise derive from upload filename stem."""
+    if title and title.strip():
+        return title.strip()
+    if filename:
+        stem = PurePosixPath(filename).stem.strip()
+        if stem:
+            return stem
+    return None
 
 
 def _parse_captured_at(raw: str | None) -> datetime | None:
@@ -177,7 +188,7 @@ async def upload_asset(
         id=asset_id,
         owner_id=user.id,
         asset_type=asset_type,
-        title=title.strip() if title else None,
+        title=_resolved_asset_title(title, file.filename),
         description=description.strip() if description else None,
         captured_at=ct_parsed,
         permission_scope=permission_scope,
@@ -310,6 +321,31 @@ async def stream_asset_file(
         media_type=primary.mime_type,
         headers=headers,
     )
+
+
+@router.delete("/{asset_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_asset(
+    asset_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> Response:
+    asset = await _load_asset_with_versions(db, asset_id)
+    if asset is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Asset not found")
+    if asset.owner_id != user.id and user.role != UserRole.admin:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Cannot delete this asset")
+    for ver in list(asset.versions):
+        try:
+            await delete_object(ver.storage_key)
+        except (ClientError, BotoCoreError) as exc:
+            logger.warning(
+                "delete_object failed for key=%s (continuing): %s",
+                ver.storage_key,
+                exc,
+            )
+    await db.execute(delete(Asset).where(Asset.id == asset_id))
+    await db.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.get("/{asset_id}", response_model=AssetRead)

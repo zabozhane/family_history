@@ -198,6 +198,16 @@
       "depends_on": [
         "T10"
       ]
+    },
+    {
+      "id": "T22",
+      "title": "Music library: Spotify-style player, multi-upload, delete, filename titles",
+      "description": "/music compact multi-file upload; music-player-bar with scrub/shuffle/repeat/volume; DELETE /api/v1/assets/{id}; row play+delete with Russian confirm modal; Asset.title defaults to upload filename stem when Form title omitted; Dockerfiles without syntax directive.",
+      "priority": "Medium",
+      "depends_on": [
+        "T13",
+        "T21"
+      ]
     }
   ]
 }
