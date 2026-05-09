@@ -6,20 +6,12 @@ stubbed in ``tasks_media`` at T7 and implemented in T8.
 """
 from __future__ import annotations
 
-import os
-
 import dramatiq
 from dramatiq.brokers.redis import RedisBroker
 
+from app.core.config import settings
 
-def _redis_url() -> str:
-    host = os.getenv("REDIS_HOST", "redis")
-    port = os.getenv("REDIS_PORT", "6379")
-    db = os.getenv("REDIS_DB", "0")
-    return f"redis://{host}:{port}/{db}"
-
-
-broker: RedisBroker = RedisBroker(url=_redis_url())
+broker: RedisBroker = RedisBroker(url=settings.redis_url)
 dramatiq.set_broker(broker)
 
 # Register media actors (metadata extraction stub in T7; real work in T8).

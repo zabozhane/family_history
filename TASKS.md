@@ -226,9 +226,9 @@ Tested:
 - `docker compose build api worker && docker compose up -d api worker` — OK.
 - Register → `POST /api/v1/assets` (tiny PNG) → **201**; `docker compose logs worker` shows `[worker] extract_asset_version_metadata (stub): asset_version_id=<uuid>`.
 
-## T8 — Implement media metadata extraction background jobs
+## T8 — Implement media metadata extraction background jobs  [DONE]
 Priority: Medium
-Status: Pending — next recommended task
+Status: Done (session 8)
 
 Develop worker tasks to fetch uploaded media from MinIO, extract metadata using ffmpeg, Pillow, mutagen, and update AssetVersion metadata in the database.
 
@@ -236,8 +236,30 @@ Depends on:
 - T6
 - T7
 
+Completion note:
+- `apps/worker/requirements.txt`: added `pydantic`, `pydantic-settings`, `aioboto3`, `asyncpg`, `Pillow`, `mutagen`.
+- `apps/worker/app/core/config.py`: env-based worker settings (`REDIS_*`, `POSTGRES_*`, `S3_*`) with `redis_url` + `postgres_dsn`.
+- `apps/worker/app/main.py`: broker now uses `settings.redis_url`.
+- `apps/worker/app/media_processing.py`: extraction helpers:
+  - image: Pillow (`width`, `height`, format/mode),
+  - audio: mutagen (+ ffprobe fallback for duration),
+  - video: ffprobe (`width`, `height`, `duration_ms`).
+- `apps/worker/app/tasks_media.py`: real actor implementation for `extract_asset_version_metadata`:
+  - reads `storage_key`/`mime_type` from `asset_versions`,
+  - downloads object from MinIO,
+  - extracts metadata by MIME,
+  - updates `width`/`height`/`duration_ms`/`metadata` in Postgres.
+
+Tested:
+- `python3 -m compileall -q apps/worker/app` — OK.
+- `docker compose build worker && docker compose up -d postgres redis minio api worker` — OK.
+- `docker compose exec api alembic upgrade head` — OK.
+- E2E: register + upload tiny PNG → worker log contains `extracted metadata` entry with the uploaded `version_id`.
+- DB check for uploaded `version_id`: `width=1`, `height=1`, `duration_ms=null`, and populated `metadata` JSON.
+
 ## T9 — Develop permission system for private, family, shared scopes
 Priority: Medium
+Status: Pending — next recommended task
 
 Implement framework in API backend to check and enforce asset permissions based on scopes for users across all relevant endpoints.
 
