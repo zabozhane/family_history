@@ -100,11 +100,11 @@ export async function proxyApiRequest(
     if (tokens) {
       backendRes = await backendFetch(req, targetUrl, tokens.access_token);
       const out = await toNextResponse(backendRes);
-      applyAuthCookies(out, tokens);
+      applyAuthCookies(out, tokens, req);
       return out;
     }
     const out = await toNextResponse(backendRes);
-    clearAuthCookies(out);
+    clearAuthCookies(out, req);
     return out;
   }
 

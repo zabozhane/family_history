@@ -10,7 +10,6 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { SignOutButton } from "@/components/sign-out-button";
 import { ApiRequestError, apiFetch } from "@/lib/api";
 import type { UserRead } from "@/lib/types";
 
@@ -50,7 +49,6 @@ export default function MePage() {
             <div className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
               {error}
             </div>
-            <SignOutButton redirectTo="/login" />
           </CardContent>
         </Card>
       </main>
@@ -85,7 +83,6 @@ export default function MePage() {
             <dt className="text-muted-foreground">ID</dt>
             <dd className="font-mono text-xs">{user.id}</dd>
           </dl>
-          <SignOutButton redirectTo="/login" />
         </CardContent>
       </Card>
     </main>

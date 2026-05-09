@@ -9,10 +9,13 @@ import { logoutSession } from "@/lib/auth";
 export type SignOutButtonProps = {
   /** Where to navigate after cookies are cleared (default `/`). */
   redirectTo?: string;
+  /** Button label when idle (default "Sign out"). */
+  label?: string;
 } & Pick<ComponentProps<typeof Button>, "variant" | "size" | "className">;
 
 export function SignOutButton({
   redirectTo = "/",
+  label = "Sign out",
   variant = "outline",
   size,
   className,
@@ -40,7 +43,7 @@ export function SignOutButton({
       disabled={pending}
       onClick={handleClick}
     >
-      {pending ? "Signing out…" : "Sign out"}
+      {pending ? "Signing out…" : label}
     </Button>
   );
 }

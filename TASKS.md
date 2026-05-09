@@ -428,3 +428,62 @@ Tested:
 - `npm run build` and `npm run typecheck` in `apps/web` — OK.
 - Python AST parse on touched API/worker modules — OK.
 
+## T16 — Dashboard shell: sidebar layout and navigation  [DONE]
+Priority: High
+Status: Done
+
+Implement the persistent **left sidebar** from the wireframe: project title/branding, primary nav (**Timeline**, **Photos**, **Music**), and **Logout** at the bottom. Define how clicks behave: e.g. **Timeline** scrolls/focuses the main timeline strip on the **home dashboard** (or navigates to `/` with that region), **Photos** opens the dedicated photos view (existing `/gallery` or renamed route) with list + future upload affordance, **Music** either anchors the player or opens a fuller tracks view as needed. Unauthenticated users keep current marketing/home behavior; authenticated layout uses the shell.
+
+Depends on:
+- T12
+- T13
+
+Completion note:
+- **`DashboardShell`** (`components/dashboard-shell.tsx`): left column **Family Media** header (link home), nav **Timeline** → `/#dashboard-timeline`, **Photos** → `/gallery`, **Music** → `/music`, **Profile** → `/me`, footer **`SignOutButton`** with label **Log out**.
+- **Route group** `app/(dashboard)/layout.tsx` wraps **`/gallery`**, **`/music`**, **`/timeline`**, **`/me`** with the same shell (URLs unchanged). Root **`SiteNav`** removed from `app/layout.tsx`; file **`site-nav.tsx`** deleted.
+- **Authenticated `/`**: server branch renders **`DashboardShell`** + placeholder **`#dashboard-timeline`** section (links to full **`/timeline`** until **T17**). Guests keep centered marketing + Sign in / Create account only.
+- **Login / register** success redirects to **`/`** (dashboard home) instead of **`/me`**, using **`window.location.assign("/")`** so the server render sees new httpOnly cookies (SPA **`router.push`** alone could reuse stale RSC for **`/`**).
+- **`/`** **`export const dynamic = "force-dynamic"`** so the home tree is not cached without fresh **`cookies()`**.
+- **Session cookies** (`lib/server/session-cookies.ts`): **`Secure`** only when the incoming request is HTTPS (**`x-forwarded-proto`** / **`req.nextUrl.protocol`**). Compose runs **`web`** with **`NODE_ENV=production`** on plain **`http://localhost:3000`**; unconditional **`Secure`** previously prevented browsers from storing **`fms_access`**. Login/register/logout + BFF refresh proxy pass **`NextRequest`** into **`applyAuthCookies`** / **`clearAuthCookies`**.
+- **`SignOutButton`**: optional **`label`** prop for sidebar wording.
+
+Tested:
+- `npm run typecheck` && `npm run build` in `apps/web` — OK (after clearing stale `.next` cache).
+- Manual Docker: **`docker compose build web && docker compose up -d web`** — login shows dashboard **`/`** with sidebar.
+
+## T17 — Home dashboard: time-range strip, filtered photos, bottom player  [TODO]
+Priority: High
+Status: Pending
+
+On the **main dashboard** (post-login home), stack three vertical zones: (1) **interactive time axis** (e.g. month buckets or draggable range) that sets a **`from`/`to`** filter; (2) **photo grid** for **image** assets whose `captured_at` (or agreed field) falls in that interval, using existing APIs/BFF patterns (`GET /api/v1/assets` with client-side filter or query params if/when API supports them); (3) **compact music player** for **audio** assets: play/pause, prev/next track, wired to streamed files via `/api/fms/v1/assets/{id}/file`. Reuse types/helpers from gallery/music/timeline where possible.
+
+Depends on:
+- T16
+- T13
+- T14
+
+Completion criteria (DoD):
+- Changing the selected range updates the visible photo set without full page reload (client state + fetch).
+- Player controls cycle through the user's audio list (order documented in UI code).
+- Empty states handled (no photos / no audio in range).
+
+Tested:
+- (pending) `npm run typecheck` && `npm run build` in `apps/web`; manual smoke in Docker stack.
+
+## T18 — Photos page: browsing + upload new media  [TODO]
+Priority: Medium
+Status: Pending
+
+Dedicated **Photos** experience: grid/list of images as today plus **upload** via multipart **`POST /api/v1/assets`** (through BFF with cookie auth). Simple form: file input(s), optional title/description/captured date if API accepts them; success refreshes list and surfaces errors. Keep scope to images first unless API already treats audio uniformly.
+
+Depends on:
+- T16
+- T10
+
+Completion criteria (DoD):
+- User can add at least one new image from the Photos route and see it in the list after upload.
+- Errors from API are shown inline or via toast pattern consistent with the app.
+
+Tested:
+- (pending) `npm run typecheck` && `npm run build`; manual upload against Compose API.
+

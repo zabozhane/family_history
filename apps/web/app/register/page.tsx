@@ -1,7 +1,6 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -17,7 +16,6 @@ import { Label } from "@/components/ui/label";
 import { ApiRequestError, sessionRegister } from "@/lib/api";
 
 export default function RegisterPage() {
-  const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [displayName, setDisplayName] = useState("");
@@ -34,7 +32,7 @@ export default function RegisterPage() {
         password,
         display_name: displayName,
       });
-      router.push("/me");
+      window.location.assign("/");
     } catch (err) {
       if (err instanceof ApiRequestError) {
         setError(err.message);

@@ -1,7 +1,6 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -17,7 +16,6 @@ import { Label } from "@/components/ui/label";
 import { ApiRequestError, sessionLogin } from "@/lib/api";
 
 export default function LoginPage() {
-  const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -29,7 +27,8 @@ export default function LoginPage() {
     setSubmitting(true);
     try {
       await sessionLogin(email, password);
-      router.push("/me");
+      // Full navigation so `/` server render sees new httpOnly cookies (SPA `router.push` can reuse stale RSC).
+      window.location.assign("/");
     } catch (err) {
       if (err instanceof ApiRequestError) {
         setError(err.message);

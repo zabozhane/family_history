@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server";
+import { type NextRequest, NextResponse } from "next/server";
 
 import { getBackendBaseUrl } from "@/lib/server/backend-url";
 import { applyAuthCookies } from "@/lib/server/session-cookies";
@@ -27,6 +27,6 @@ export async function POST(req: NextRequest) {
 
   const tokens = JSON.parse(payload) as TokenResponse;
   const out = NextResponse.json({ ok: true }, { status: 201 });
-  applyAuthCookies(out, tokens);
+  applyAuthCookies(out, tokens, req);
   return out;
 }

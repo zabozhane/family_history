@@ -27,6 +27,6 @@ export async function POST(req: NextRequest) {
 
   const tokens = JSON.parse(payload) as TokenResponse;
   const out = NextResponse.json({ ok: true });
-  applyAuthCookies(out, tokens);
+  applyAuthCookies(out, tokens, req);
   return out;
 }
