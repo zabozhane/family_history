@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
 
+import { MusicPlayerDock, useMusicPlayer } from "@/components/music-player-context";
 import { SignOutButton } from "@/components/sign-out-button";
 import { cn } from "@/lib/utils";
 
@@ -35,11 +36,14 @@ const primaryNav: NavItem[] = [
 
 export function DashboardShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
+  const { playerVisible, queue } = useMusicPlayer();
+  const reserveDockSpace =
+    playerVisible && queue.length > 0;
 
   return (
-    <div className="flex min-h-screen w-full bg-background">
+    <div className="flex h-dvh max-h-dvh min-h-0 w-full overflow-hidden bg-background">
       <aside
-        className="flex w-[220px] shrink-0 flex-col border-r border-border bg-muted/40"
+        className="flex h-full min-h-0 w-[220px] shrink-0 flex-col overflow-hidden border-r border-border bg-muted/40"
         aria-label="Workspace"
       >
         <div className="border-b border-border px-4 py-4">
@@ -52,7 +56,7 @@ export function DashboardShell({ children }: { children: ReactNode }) {
           <p className="mt-1 text-xs text-muted-foreground">Family workspace</p>
         </div>
         <nav
-          className="flex flex-1 flex-col gap-0.5 px-2 py-3"
+          className="flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto px-2 py-3"
           aria-label="Primary"
         >
           {primaryNav.map((item) => {
@@ -93,8 +97,16 @@ export function DashboardShell({ children }: { children: ReactNode }) {
           />
         </div>
       </aside>
-      <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden md:min-h-screen">
-        {children}
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+        <div
+          className={cn(
+            "min-h-0 flex-1 overflow-y-auto",
+            reserveDockSpace && "pb-[4.75rem]",
+          )}
+        >
+          {children}
+        </div>
+        <MusicPlayerDock />
       </div>
     </div>
   );

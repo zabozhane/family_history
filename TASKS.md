@@ -555,6 +555,7 @@ Depends on:
 
 Completion note:
 - **`apps/web`**: **`music-upload-form.tsx`** — compact toolbar (no large card), **`multiple`** file input, sequential **`POST /api/v1/assets`** per file; **`music-player-bar.tsx`** — dark pill UI (**`lucide-react`** icons), hidden native `<audio controls>` replaced by custom scrubber + volume; **`music/page.tsx`** — footer player, shuffle/next randomization when shuffle on, repeat one/all/off, Russian delete confirm modal, row **Play/Pause** + **Trash** icons.
+- **Follow-up (player + dashboard + list UX)**: **`MusicPlayerProvider`** in root **`app/layout.tsx`** (single `<audio>`, playback continues across routes e.g. Music → home/Timeline). **`music-player-context.tsx`**: dock **`fixed`** under main column (`left-[220px]`), bar passes **`durationMsFallback`** from **`primary_version.duration_ms`**, `<audio>` rendered before **`{children}`**; compact **`music-player-bar`**. **`dashboard-shell.tsx`**: **`h-dvh`** + **`overflow-hidden`**, inner pane scroll only; bottom padding when dock visible. **`music/page.tsx`**: denser track rows (`py-2`, smaller buttons/text).
 - **`apps/web/lib/api.ts`**: **`apiDeleteAsset`** (`DELETE` via BFF).
 - **`apps/api`**: **`DELETE /api/v1/assets/{id}`** — delete MinIO keys then **`Asset`** row; **`delete_object`** in **`storage/s3.py`**; **`_resolved_asset_title`** — if **`title`** Form empty, use **`PurePosixPath(filename).stem`** (applies to image/audio/video uploads without explicit title).
 - **`docker-compose.yml`**: **`api`** **`depends_on`** **`minio-init`** **`service_completed_successfully`** (fresh stacks get bucket before API).
@@ -565,4 +566,5 @@ Completion criteria (DoD):
 - Play from list or footer; scrub works; delete asks for confirmation and removes track + storage.
 
 Tested:
-- **`npm run typecheck`** in **`apps/web`** — OK.
+- **`npm run typecheck`** in **`apps/web`** — OK (includes follow-up).
+
