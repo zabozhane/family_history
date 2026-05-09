@@ -24,7 +24,7 @@ import { assetFileUrl } from "@/lib/media-url";
 import type { AssetRead } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
-/** Playlist order: audio with `captured_at` in the selected month, newest first (`captured_at` desc). */
+/** Playlist order: media in the selected month by timeline instant, newest first. */
 const FETCH_LIMIT = 200;
 
 /** Horizontal overlap between chevron segments (px). */
@@ -41,7 +41,7 @@ function localMonthRange(year: number, monthIndex: number): { start: Date; end: 
   return { start, end };
 }
 
-function parseCapturedAt(raw: string | null): Date | null {
+function parseInstant(raw: string | null | undefined): Date | null {
   if (!raw) return null;
   const d = new Date(raw);
   return Number.isNaN(d.getTime()) ? null : d;
@@ -51,12 +51,18 @@ function inRange(d: Date, start: Date, end: Date): boolean {
   return d >= start && d <= end;
 }
 
-/** Distinct calendar years from any asset that has `captured_at`, newest first. */
+/** Capture date when set; otherwise upload time (`created_at`). */
+function timelineInstant(asset: AssetRead): Date | null {
+  return parseInstant(asset.captured_at) ?? parseInstant(asset.created_at);
+}
+
+/** Distinct calendar years from image/audio timeline instants, newest first. */
 function yearsFromAssets(assets: AssetRead[]): number[] {
   const ys = new Set<number>();
   for (const a of assets) {
-    const cd = parseCapturedAt(a.captured_at);
-    if (cd) ys.add(cd.getFullYear());
+    if (a.asset_type !== "image" && a.asset_type !== "audio") continue;
+    const t = timelineInstant(a);
+    if (t) ys.add(t.getFullYear());
   }
   return Array.from(ys).sort((a, b) => b - a);
 }
@@ -173,18 +179,18 @@ export function DashboardHome() {
     const audio: AssetRead[] = [];
     for (const a of assets) {
       if (a.asset_type !== "image" && a.asset_type !== "audio") continue;
-      const cd = parseCapturedAt(a.captured_at);
-      if (!cd || !inRange(cd, rangeStart, rangeEnd)) continue;
+      const t = timelineInstant(a);
+      if (!t || !inRange(t, rangeStart, rangeEnd)) continue;
       if (a.asset_type === "image") images.push(a);
       else audio.push(a);
     }
-    const byCapturedDesc = (x: AssetRead, y: AssetRead) => {
-      const dx = parseCapturedAt(x.captured_at)?.getTime() ?? 0;
-      const dy = parseCapturedAt(y.captured_at)?.getTime() ?? 0;
+    const byTimelineDesc = (x: AssetRead, y: AssetRead) => {
+      const dx = timelineInstant(x)?.getTime() ?? 0;
+      const dy = timelineInstant(y)?.getTime() ?? 0;
       return dy - dx;
     };
-    images.sort(byCapturedDesc);
-    audio.sort(byCapturedDesc);
+    images.sort(byTimelineDesc);
+    audio.sort(byTimelineDesc);
     return { imagesInRange: images, audioInRange: audio };
   }, [assets, selectedMonthRange]);
 
@@ -249,7 +255,7 @@ export function DashboardHome() {
   }
 
   const selectionKey = `${selectedYear}-${pad2(selectedMonthIndex + 1)}`;
-  const hasDatedUploads = yearsWithData.length > 0;
+  const hasTimelineYears = yearsWithData.length > 0;
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -260,20 +266,18 @@ export function DashboardHome() {
         <div className="mb-4">
           <h2 className="text-lg font-semibold tracking-tight">Timeline</h2>
           <p className="mt-1 max-w-xl text-xs text-muted-foreground">
-            Years listed here have at least one item with a{" "}
-            <code className="rounded bg-muted px-1 py-0.5 text-[10px]">
-              captured_at
-            </code>{" "}
-            date. Pick a month on the chevron bar (local calendar). Need events?{" "}
+            Photos and tracks are grouped by capture date when set; otherwise by upload time. Years
+            listed here have at least one image or audio file in that year. Pick a month on the
+            chevron bar (local calendar). Need events?{" "}
             <Link href="/timeline" className="font-medium text-primary underline">
               Full timeline
             </Link>
             .
           </p>
-          {!hasDatedUploads ? (
+          {!hasTimelineYears ? (
             <p className="mt-2 max-w-xl text-xs text-amber-700 dark:text-amber-500">
-              No dated uploads in your library yet — only the current year is shown. Add a capture
-              date when uploading so years appear here.
+              No photos or music in your library yet — only the current year is shown. Upload media
+              from the sidebar to populate the timeline.
             </p>
           ) : null}
         </div>
@@ -365,11 +369,7 @@ export function DashboardHome() {
         </h3>
         {imagesInRange.length === 0 ? (
           <p className="text-sm text-muted-foreground">
-            No dated photos in this month (images need{" "}
-            <code className="rounded bg-muted px-1 py-0.5 text-xs">
-              captured_at
-            </code>
-            ).{" "}
+            No photos in this month (by capture date, or upload date if none).{" "}
             <Link href="/gallery" className="font-medium text-primary underline">
               All photos
             </Link>
@@ -403,7 +403,7 @@ export function DashboardHome() {
         </h3>
         {audioInRange.length === 0 ? (
           <p className="text-sm text-muted-foreground">
-            No dated audio in this month.{" "}
+            No audio in this month (by capture date, or upload date if none).{" "}
             <Link href="/music" className="font-medium text-primary underline">
               Music library
             </Link>
@@ -445,7 +445,7 @@ export function DashboardHome() {
               <p className="text-xs text-muted-foreground">
                 {audioIndex + 1} / {audioInRange.length}
                 {" · "}
-                Order: newest capture date first
+                Order: newest on timeline first
               </p>
               {currentTrack?.primary_version ? (
                 <audio

@@ -34,6 +34,7 @@ class AssetRead(BaseModel):
     title: str | None
     description: str | None
     captured_at: datetime | None
+    created_at: datetime
     permission_scope: PermissionScope
     primary_version: AssetVersionRead | None = None
 

@@ -126,6 +126,7 @@ def serialize_asset_read(
         title=asset.title,
         description=asset.description,
         captured_at=asset.captured_at,
+        created_at=asset.created_at,
         permission_scope=asset.permission_scope,
         primary_version=AssetVersionRead.model_validate(primary) if primary else None,
     )
@@ -239,6 +240,7 @@ async def upload_asset(
         title=asset.title,
         description=asset.description,
         captured_at=asset.captured_at,
+        created_at=asset.created_at,
         permission_scope=asset.permission_scope,
         primary_version=ver_read,
     )
