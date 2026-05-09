@@ -159,7 +159,7 @@ Completion note:
 - `docker-compose.yml`: `web.build.args.NEXT_PUBLIC_API_BASE_URL` honors the same env value.
 - `apps/web/lib/{types,auth,api,styles}.ts`: typed `apiFetch<T>` with one silent refresh on 401, localStorage tokens, inline-style atoms.
 - Pages: `app/login/page.tsx`, `app/register/page.tsx`, `app/me/page.tsx`, updated `app/page.tsx` with anonymous landing links.
-- Every UI file carries `// TODO(T12)` markers so the proper Tailwind/shadcn rebuild has clear hooks.
+- ~~Every UI file carried `// TODO(T12)` markers~~ — superseded by **T12** (markers removed from `apps/web`).
 
 Tested:
 - `docker compose build api web` + `docker compose up -d` — both healthy.
@@ -174,17 +174,36 @@ Open questions to revisit in T12 proper:
 - Re-issue server-side refresh-rotation / revocation list.
 - Generate TS types from OpenAPI instead of hand-mirroring.
 
-## T6 — Create upload pipeline skeleton for media assets  [IN PROGRESS]
+## T6 — Create upload pipeline skeleton for media assets  [DONE]
 Priority: Medium
-Status: Pending — next recommended task
+Status: Done (session 6)
 
 Implement API endpoints to accept image/audio/video uploads, save files in MinIO storage, store metadata placeholder in database, and create Asset and AssetVersion records.
 
 Depends on:
 - T5
 
-## T7 — Set up Dramatiq task queue using Redis broker
+Completion note:
+- `apps/api/requirements.txt`: `aioboto3`, `python-multipart`.
+- `app/core/config.py`: `S3_*` settings aligned with Compose / `.env.example`, plus `API_UPLOAD_MAX_BYTES` (default ~100MB).
+- `app/storage/s3.py`: async `put_object` via aioboto3 + path-style addressing for MinIO.
+- `app/schemas/asset.py`: `AssetRead`, `AssetVersionRead`, `AssetUploadResponse`.
+- `app/api/v1/assets.py`: `POST /api/v1/assets` — multipart `file`, optional `title`/`description`/`captured_at` (ISO 8601); MIME→`AssetType` for `image/*`, `video/*`, `audio/*` only (**415** otherwise); storage key `{owner_id}/{asset_id}/{version_id}{suffix}`; `permission_scope` default **private**; `flush` → MinIO `put_object` → `commit`, rollback DB on storage failure (**502**).
+- `app/api/v1/router.py`: mounts assets router at `/assets`.
+- `.env.example`: commented hint for optional `API_UPLOAD_MAX_BYTES`.
+- **Out of scope (by plan):** Dramatiq enqueue (T7), metadata extraction (T8).
+
+Tested:
+- `python3 -m compileall -q apps/api/app` — OK.
+- `docker compose build api && docker compose up -d api` — OK.
+- OpenAPI (`/docs`): `POST /api/v1/assets` under tag **assets**.
+- Register → `POST /api/v1/assets` with tiny PNG (`Content-Type: image/png`) → **201**; JSON returns nested `asset` + `version` with `storage_key`, `mime_type`, `size_bytes`, empty `media_metadata`, null width/height/duration.
+- Bogus Bearer token on upload → **401**.
+- `text/plain` upload → **415**.
+
+## T7 — Set up Dramatiq task queue using Redis broker  [DONE]
 Priority: Medium
+Status: Done (session 7)
 
 Integrate Dramatiq with Redis for async task processing in worker app and connect worker to API for enqueuing media metadata extraction jobs.
 
@@ -192,8 +211,24 @@ Depends on:
 - T3
 - T5
 
-## T8 — Implement media metadata extraction background jobs
+Completion note:
+- `apps/api/requirements.txt`: `dramatiq[redis]` (producer).
+- `app/core/config.py`: `REDIS_HOST` / `REDIS_PORT` / `REDIS_DB` + `redis_url` for `RedisBroker`.
+- `app/dramatiq_broker.py`: API process sets global Dramatiq broker (matches Compose `REDIS_*` env already passed to `api`).
+- `app/tasks_media.py` (API): declares `extract_asset_version_metadata` with explicit `actor_name` + `queue_name="media"` for stable cross-process routing.
+- `apps/worker/app/tasks_media.py`: consumer stub — logs `asset_version_id`; T8 replaces body with real extraction + DB writes.
+- `apps/worker/app/main.py`: imports `tasks_media` after broker init so Dramatiq registers the actor.
+- `app/main.py`: imports `dramatiq_broker` + `tasks_media` **before** `api_router` so actors exist before route modules load.
+- `app/api/v1/assets.py`: after successful DB commit on upload, `extract_asset_version_metadata.send(str(version.id))`; enqueue failures are logged and do **not** fail the HTTP response (upload already persisted).
+
+Tested:
+- `python3 -m compileall -q apps/api/app apps/worker/app` — OK.
+- `docker compose build api worker && docker compose up -d api worker` — OK.
+- Register → `POST /api/v1/assets` (tiny PNG) → **201**; `docker compose logs worker` shows `[worker] extract_asset_version_metadata (stub): asset_version_id=<uuid>`.
+
+## T8 — Implement media metadata extraction background jobs  [DONE]
 Priority: Medium
+Status: Done (session 8)
 
 Develop worker tasks to fetch uploaded media from MinIO, extract metadata using ffmpeg, Pillow, mutagen, and update AssetVersion metadata in the database.
 
@@ -201,16 +236,61 @@ Depends on:
 - T6
 - T7
 
-## T9 — Develop permission system for private, family, shared scopes
+Completion note:
+- `apps/worker/requirements.txt`: added `pydantic`, `pydantic-settings`, `aioboto3`, `asyncpg`, `Pillow`, `mutagen`.
+- `apps/worker/app/core/config.py`: env-based worker settings (`REDIS_*`, `POSTGRES_*`, `S3_*`) with `redis_url` + `postgres_dsn`.
+- `apps/worker/app/main.py`: broker now uses `settings.redis_url`.
+- `apps/worker/app/media_processing.py`: extraction helpers:
+  - image: Pillow (`width`, `height`, format/mode),
+  - audio: mutagen (+ ffprobe fallback for duration),
+  - video: ffprobe (`width`, `height`, `duration_ms`).
+- `apps/worker/app/tasks_media.py`: real actor implementation for `extract_asset_version_metadata`:
+  - reads `storage_key`/`mime_type` from `asset_versions`,
+  - downloads object from MinIO,
+  - extracts metadata by MIME,
+  - updates `width`/`height`/`duration_ms`/`metadata` in Postgres.
+
+Tested:
+- `python3 -m compileall -q apps/worker/app` — OK.
+- `docker compose build worker && docker compose up -d postgres redis minio api worker` — OK.
+- `docker compose exec api alembic upgrade head` — OK.
+- E2E: register + upload tiny PNG → worker log contains `extracted metadata` entry with the uploaded `version_id`.
+- DB check for uploaded `version_id`: `width=1`, `height=1`, `duration_ms=null`, and populated `metadata` JSON.
+
+## T9 — Develop permission system for private, family, shared scopes  [DONE]
 Priority: Medium
+Status: Done (session 9)
 
 Implement framework in API backend to check and enforce asset permissions based on scopes for users across all relevant endpoints.
 
 Depends on:
 - T5
 
-## T10 — Build typed, versioned FastAPI RESTful API with OpenAPI docs
+Completion note:
+- Added `apps/api/app/permissions/assets.py` with centralized visibility policy:
+  - `can_read_asset(user, asset)` for per-record checks,
+  - `asset_read_filter_for_user(user)` for SQL-level filtering.
+- Updated `POST /api/v1/assets` to accept `permission_scope` (defaults to `private`).
+- Added read endpoints in `apps/api/app/api/v1/assets.py`:
+  - `GET /api/v1/assets` (paginated list of visible assets),
+  - `GET /api/v1/assets/{asset_id}` (404 when missing or not visible).
+- Policy behavior in MVP:
+  - `private` => owner/admin only,
+  - `family`/`shared`/`public_link` => visible to authenticated users (plus owner/admin).
+
+Tested:
+- `python3 -m compileall -q apps/api/app` — OK.
+- `docker compose build api && docker compose up -d api` — OK.
+- `docker compose exec api alembic upgrade head` — OK.
+- E2E with 2 users:
+  - user A uploads one `private` and one `family` asset,
+  - user B `GET /assets/{private}` => **404**,
+  - user B `GET /assets/{family}` => **200**,
+  - user B `GET /assets?limit=200` includes only visible items.
+
+## T10 — Build typed, versioned FastAPI RESTful API with OpenAPI docs  [DONE]
 Priority: High
+Status: Done (session 10)
 
 Define typed API endpoints for authentication, media upload, timeline retrieval, permission checks, and document API versions with OpenAPI specification.
 
@@ -219,8 +299,29 @@ Depends on:
 - T6
 - T9
 
-## T11 — Implement foundational timeline aggregation model
+Completion note:
+- Added typed timeline schemas in `apps/api/app/schemas/timeline.py`.
+- Added timeline endpoint `GET /api/v1/timeline` in `apps/api/app/api/v1/timeline.py` and mounted router in `api/v1/router.py`.
+- Extended assets API with typed permission-check endpoint:
+  - `GET /api/v1/assets/{asset_id}/permission`.
+- Extended upload contract:
+  - `POST /api/v1/assets` now supports `permission_scope` in multipart form (default `private`).
+- Added automatic timeline event creation on upload:
+  - each upload creates `TimelineEntry(kind=asset_added)` with typed payload.
+- OpenAPI `/docs` now includes typed routes for auth, assets (upload/list/get/permission), users/me, admin ping, and timeline retrieval under `/api/v1`.
+
+Tested:
+- `python3 -m compileall -q apps/api/app` — OK.
+- `docker compose build api && docker compose up -d api` — OK.
+- `docker compose exec api alembic upgrade head` — OK.
+- E2E:
+  - upload `family` asset => `GET /api/v1/assets/{id}` as second user => **200**,
+  - `GET /api/v1/assets/{id}/permission` => **200** with typed keys,
+  - `GET /api/v1/timeline?limit=20` => **200** and includes uploaded `asset_id`.
+
+## T11 — Implement foundational timeline aggregation model  [DONE]
 Priority: Medium
+Status: Done (session 11)
 
 Develop backend logic to aggregate Assets, AssetVersions, and TimelineEntries into a unified timeline view respecting permissions and filter criteria.
 
@@ -228,8 +329,31 @@ Depends on:
 - T4
 - T9
 
-## T12 — Create Next.js frontend shell with authentication integration
+Completion note:
+- Reworked `GET /api/v1/timeline` into an aggregated timeline endpoint:
+  - joins `timeline_entries` with related `assets` and primary `asset_versions`.
+- Added typed aggregation schemas in `apps/api/app/schemas/timeline.py`:
+  - `TimelineItemRead`, `TimelineAssetRead`, `TimelineAssetVersionRead`.
+- Added permission-aware and filterable retrieval in `apps/api/app/api/v1/timeline.py`:
+  - filters: `from`, `to`, `asset_type`, `kind`, `limit`, `offset`.
+  - non-admin visibility combines own entries + readable asset-linked entries.
+- Timeline response now includes, per item:
+  - base entry fields,
+  - optional embedded `asset`,
+  - optional embedded `primary_version`.
+
+Tested:
+- `python3 -m compileall -q apps/api/app` — OK.
+- `docker compose build api && docker compose up -d api` — OK.
+- `docker compose exec api alembic upgrade head` — OK.
+- E2E:
+  - upload `family` image asset,
+  - `GET /api/v1/timeline?asset_type=image&kind=asset_added&limit=20` => **200**,
+  - response items contain `asset` and `primary_version` objects and include uploaded `asset_id`.
+
+## T12 — Create Next.js frontend shell with authentication integration  [DONE]
 Priority: High
+Status: Done
 
 Implement frontend authentication flows using JWT tokens from API, including login, logout, and protected routes with Tailwind and shadcn/ui components.
 
@@ -238,8 +362,19 @@ Depends on:
 
 Note: This task SUPERSEDES T12a — rebuild the auth screens on Tailwind + shadcn/ui, revisit token storage strategy (localStorage → httpOnly cookies), and remove all `// TODO(T12)` markers in `apps/web`.
 
-## T13 — Implement basic photo gallery and music playback
+Completion note:
+- Tailwind + PostCSS + `tailwindcss-animate`; minimal shadcn-style primitives in `components/ui/` (`Button`, `Input`, `Label`, `Card`) and `app/globals.css`.
+- JWTs stored in **httpOnly** cookies only (`fms_access`, `fms_refresh`). Route handlers: `/api/session/login`, `/api/session/register`, `/api/session/logout`; BFF proxy `/api/fms/[...path]` forwards to FastAPI and performs server-side refresh when upstream returns 401.
+- `middleware.ts` redirects unauthenticated visits away from `/me` to `/login`.
+- `API_INTERNAL_BASE_URL` (default `http://api:8000` in Compose) for server-side fetches from the `web` container; browsers continue using `NEXT_PUBLIC_API_BASE_URL` for same-origin `/api/*`.
+- Removed `lib/styles.ts`; cleared all `// TODO(T12)` markers under `apps/web`.
+
+Tested:
+- `npm install && npm run build` in `apps/web` — OK.
+
+## T13 — Implement basic photo gallery and music playback  [DONE]
 Priority: Medium
+Status: Done
 
 Develop UI components for browsing photo gallery and playing music tracks with basic playback controls consuming API data.
 
@@ -247,8 +382,17 @@ Depends on:
 - T12
 - T10
 
-## T14 — Implement timeline navigation and filtering UI
+Completion note:
+- **API**: `AssetRead` now includes optional `primary_version`; `GET /api/v1/assets` and `GET /api/v1/assets/{id}` eager-load versions. New **`GET /api/v1/assets/{asset_id}/file`** streams the primary version from MinIO/S3 (`iter_object_chunks`, `head_object_exists` in `app/storage/s3.py`) with permission checks.
+- **Web**: `SiteNav` in root layout; protected routes **`/gallery`** and **`/music`** (middleware). Pages load assets via `apiFetch`, filter by `asset_type`, render images from `/api/fms/v1/assets/{id}/file` and HTML5 `<audio controls>`. Types in `lib/types.ts`, helper `lib/media-url.ts`.
+
+Tested:
+- Python AST parse on touched API files — OK.
+- `npm run build` in `apps/web` — OK.
+
+## T14 — Implement timeline navigation and filtering UI  [DONE]
 Priority: Medium
+Status: Done
 
 Develop frontend timeline view with filtering by time ranges and asset types, integrating API timeline endpoints and updating UI accordingly.
 
@@ -256,11 +400,90 @@ Depends on:
 - T12
 - T11
 
-## T15 — Implement environment configuration and strict typing across codebase
+Completion note:
+- **`/timeline`**: client page with filters mapped to `GET /api/v1/timeline` (`from`/`to` as ISO datetimes from `datetime-local`, `asset_type`, `kind`), Apply / Reset, and **Load more** pagination (`offset`/`limit`).
+- Cards show kind badge, `occurred_at`, linked asset title/type/scope, payload summary for uploads, optional **image thumbnail** via `assetFileUrl` when `asset_type === image`.
+- Types: `TimelineItemRead` and related in `lib/types.ts`; query helper `lib/timeline-query.ts`.
+- **Middleware** + **SiteNav** + home CTA include `/timeline` (auth-gated like gallery/music).
+
+Tested:
+- `npm run build` in `apps/web` — OK.
+
+## T15 — Implement environment configuration and strict typing across codebase  [DONE]
 Priority: Medium
+Status: Done
 
 Ensure all components (api, web, worker) use environment variables for config and enforce TypeScript/Python strict typing for code quality.
 
 Depends on:
 - T1
+
+Completion note:
+- **Web**: `tsconfig.json` adds `noUncheckedIndexedAccess`, `noImplicitOverride`, `noUnusedLocals`, `noUnusedParameters`; server env accessors live in **`lib/env/server.ts`** (used via `lib/server/backend-url.ts`).
+- **API**: `Settings` loads optional **`.env`** via pydantic-settings; **`reject_weak_secret_in_production`** validator blocks default/short secrets when `API_ENV=production`. ORM-facing schemas use **`model_config: ClassVar[ConfigDict]`** for Pyright-friendly Pydantic v2 typing.
+- **Worker**: same **`.env`** file hook on `Settings`; **`apps/worker/pyproject.toml`** + **`requirements-dev.txt`** for Pyright.
+- **Tooling**: **`apps/api/pyproject.toml`**, **`apps/api/requirements-dev.txt`**, worker counterparts; **`.env.example`** documents web internal URL + worker/pyright usage.
+
+Tested:
+- `npm run build` and `npm run typecheck` in `apps/web` — OK.
+- Python AST parse on touched API/worker modules — OK.
+
+## T16 — Dashboard shell: sidebar layout and navigation  [DONE]
+Priority: High
+Status: Done
+
+Implement the persistent **left sidebar** from the wireframe: project title/branding, primary nav (**Timeline**, **Photos**, **Music**), and **Logout** at the bottom. Define how clicks behave: e.g. **Timeline** scrolls/focuses the main timeline strip on the **home dashboard** (or navigates to `/` with that region), **Photos** opens the dedicated photos view (existing `/gallery` or renamed route) with list + future upload affordance, **Music** either anchors the player or opens a fuller tracks view as needed. Unauthenticated users keep current marketing/home behavior; authenticated layout uses the shell.
+
+Depends on:
+- T12
+- T13
+
+Completion note:
+- **`DashboardShell`** (`components/dashboard-shell.tsx`): left column **Family Media** header (link home), nav **Timeline** → `/#dashboard-timeline`, **Photos** → `/gallery`, **Music** → `/music`, **Profile** → `/me`, footer **`SignOutButton`** with label **Log out**.
+- **Route group** `app/(dashboard)/layout.tsx` wraps **`/gallery`**, **`/music`**, **`/timeline`**, **`/me`** with the same shell (URLs unchanged). Root **`SiteNav`** removed from `app/layout.tsx`; file **`site-nav.tsx`** deleted.
+- **Authenticated `/`**: server branch renders **`DashboardShell`** + placeholder **`#dashboard-timeline`** section (links to full **`/timeline`** until **T17**). Guests keep centered marketing + Sign in / Create account only.
+- **Login / register** success redirects to **`/`** (dashboard home) instead of **`/me`**, using **`window.location.assign("/")`** so the server render sees new httpOnly cookies (SPA **`router.push`** alone could reuse stale RSC for **`/`**).
+- **`/`** **`export const dynamic = "force-dynamic"`** so the home tree is not cached without fresh **`cookies()`**.
+- **Session cookies** (`lib/server/session-cookies.ts`): **`Secure`** only when the incoming request is HTTPS (**`x-forwarded-proto`** / **`req.nextUrl.protocol`**). Compose runs **`web`** with **`NODE_ENV=production`** on plain **`http://localhost:3000`**; unconditional **`Secure`** previously prevented browsers from storing **`fms_access`**. Login/register/logout + BFF refresh proxy pass **`NextRequest`** into **`applyAuthCookies`** / **`clearAuthCookies`**.
+- **`SignOutButton`**: optional **`label`** prop for sidebar wording.
+
+Tested:
+- `npm run typecheck` && `npm run build` in `apps/web` — OK (after clearing stale `.next` cache).
+- Manual Docker: **`docker compose build web && docker compose up -d web`** — login shows dashboard **`/`** with sidebar.
+
+## T17 — Home dashboard: time-range strip, filtered photos, bottom player  [TODO]
+Priority: High
+Status: Pending
+
+On the **main dashboard** (post-login home), stack three vertical zones: (1) **interactive time axis** (e.g. month buckets or draggable range) that sets a **`from`/`to`** filter; (2) **photo grid** for **image** assets whose `captured_at` (or agreed field) falls in that interval, using existing APIs/BFF patterns (`GET /api/v1/assets` with client-side filter or query params if/when API supports them); (3) **compact music player** for **audio** assets: play/pause, prev/next track, wired to streamed files via `/api/fms/v1/assets/{id}/file`. Reuse types/helpers from gallery/music/timeline where possible.
+
+Depends on:
+- T16
+- T13
+- T14
+
+Completion criteria (DoD):
+- Changing the selected range updates the visible photo set without full page reload (client state + fetch).
+- Player controls cycle through the user's audio list (order documented in UI code).
+- Empty states handled (no photos / no audio in range).
+
+Tested:
+- (pending) `npm run typecheck` && `npm run build` in `apps/web`; manual smoke in Docker stack.
+
+## T18 — Photos page: browsing + upload new media  [TODO]
+Priority: Medium
+Status: Pending
+
+Dedicated **Photos** experience: grid/list of images as today plus **upload** via multipart **`POST /api/v1/assets`** (through BFF with cookie auth). Simple form: file input(s), optional title/description/captured date if API accepts them; success refreshes list and surfaces errors. Keep scope to images first unless API already treats audio uniformly.
+
+Depends on:
+- T16
+- T10
+
+Completion criteria (DoD):
+- User can add at least one new image from the Photos route and see it in the list after upload.
+- Errors from API are shown inline or via toast pattern consistent with the app.
+
+Tested:
+- (pending) `npm run typecheck` && `npm run build`; manual upload against Compose API.
 

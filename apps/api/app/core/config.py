@@ -9,7 +9,9 @@ from functools import lru_cache
 
 from urllib.parse import quote_plus
 
-from pydantic import Field
+from typing import Self
+
+from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -17,6 +19,8 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(
         case_sensitive=True,
         extra="ignore",
+        env_file=".env",
+        env_file_encoding="utf-8",
     )
 
     # --- API ---
@@ -37,6 +41,38 @@ class Settings(BaseSettings):
     CORS_ALLOWED_ORIGINS: list[str] = Field(
         default_factory=lambda: ["http://localhost:3000"]
     )
+
+    # --- S3-compatible storage (MinIO locally) ---
+    S3_ENDPOINT_URL: str = Field(default="http://minio:9000")
+    S3_ACCESS_KEY: str = Field(default="minioadmin")
+    S3_SECRET_KEY: str = Field(default="minioadmin")
+    S3_BUCKET: str = Field(default="family-media")
+    S3_REGION: str = Field(default="us-east-1")
+    S3_USE_SSL: bool = Field(default=False)
+
+    # Upload limits (skeleton — tighten per env in prod).
+    API_UPLOAD_MAX_BYTES: int = Field(default=102_400_000)
+
+    @model_validator(mode="after")
+    def reject_weak_secret_in_production(self) -> Self:
+        if self.API_ENV.strip().lower() != "production":
+            return self
+        secret = self.API_SECRET_KEY.strip()
+        weak = {"", "change-me", "changeme", "secret"}
+        if secret.lower() in weak or len(secret) < 24:
+            msg = "API_SECRET_KEY must be a long random value when API_ENV=production"
+            raise ValueError(msg)
+        return self
+
+    # --- Redis (Dramatiq broker — T7+) ---
+    REDIS_HOST: str = Field(default="redis")
+    REDIS_PORT: int = Field(default=6379)
+    REDIS_DB: int = Field(default=0)
+
+    @property
+    def redis_url(self) -> str:
+        """Dramatiq ``RedisBroker`` DSN (no auth — matches local Compose redis)."""
+        return f"redis://{self.REDIS_HOST}:{self.REDIS_PORT}/{self.REDIS_DB}"
 
     @property
     def database_url_async(self) -> str:

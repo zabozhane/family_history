@@ -1,1 +1,7 @@
 dramatiq[redis]>=1.17,<2
+pydantic>=2.9,<3
+pydantic-settings>=2.5,<3
+aioboto3>=13.0,<14
+asyncpg>=0.29,<1
+Pillow>=10.4,<12
+mutagen>=1.47,<2

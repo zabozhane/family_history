@@ -19,7 +19,8 @@ __pycache__/
 .eggs/
 .venv/
 venv/
-env/
+# Root-only Python venv folder name (do not use bare `env/` — it hides apps/web/lib/env).
+/env/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/

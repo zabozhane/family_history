@@ -140,6 +140,37 @@
       "depends_on": [
         "T1"
       ]
+    },
+    {
+      "id": "T16",
+      "title": "Dashboard shell: sidebar layout and navigation",
+      "description": "Persistent left sidebar (project name, Timeline / Photos / Music, Logout); authenticated layout matches wireframe; nav wired to home dashboard and dedicated Photos/Music views without breaking protected routes.",
+      "priority": "High",
+      "depends_on": [
+        "T12",
+        "T13"
+      ]
+    },
+    {
+      "id": "T17",
+      "title": "Home dashboard: time-range strip, filtered photos, bottom player",
+      "description": "Main dashboard stacks timeline range selector (e.g. months), photo grid filtered by selected interval, and compact audio player with track switching using existing API/BFF patterns.",
+      "priority": "High",
+      "depends_on": [
+        "T16",
+        "T13",
+        "T14"
+      ]
+    },
+    {
+      "id": "T18",
+      "title": "Photos page: browsing and multipart upload",
+      "description": "Photos route shows gallery plus upload form posting multipart to POST /api/v1/assets via authenticated BFF; refresh list on success; inline errors.",
+      "priority": "Medium",
+      "depends_on": [
+        "T16",
+        "T10"
+      ]
     }
   ]
 }
