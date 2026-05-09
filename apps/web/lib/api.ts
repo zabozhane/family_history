@@ -1,16 +1,15 @@
-// Tiny typed fetch wrapper with one silent refresh attempt on 401.
-// TODO(T12): replace with a proper fetcher (SWR/React Query) and OpenAPI-typed client.
+import type { ApiError } from "./types";
 
-import {
-  clearTokens,
-  getAccessToken,
-  getRefreshToken,
-  saveTokens,
-} from "./auth";
-import type { ApiError, TokenResponse } from "./types";
+const PROXY_PREFIX = "/api/fms";
 
-const API_BASE_URL: string =
-  process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
+/** Maps `/api/v1/...` requests to the Next.js BFF proxy (`/api/fms/v1/...`). */
+export function toProxiedApiPath(path: string): string {
+  const trimmed = path.startsWith("/") ? path.slice(1) : path;
+  const withoutApiPrefix = trimmed.startsWith("api/")
+    ? trimmed.slice("api/".length)
+    : trimmed;
+  return `${PROXY_PREFIX}/${withoutApiPrefix}`;
+}
 
 export class ApiRequestError extends Error {
   status: number;
@@ -20,42 +19,6 @@ export class ApiRequestError extends Error {
     this.status = status;
     this.body = body;
   }
-}
-
-async function rawFetch(
-  path: string,
-  init: RequestInit,
-  withAuth: boolean,
-): Promise<Response> {
-  const headers = new Headers(init.headers ?? {});
-  if (init.body !== undefined && !headers.has("Content-Type")) {
-    headers.set("Content-Type", "application/json");
-  }
-  if (withAuth) {
-    const token = getAccessToken();
-    if (token) headers.set("Authorization", `Bearer ${token}`);
-  }
-  return fetch(`${API_BASE_URL}${path}`, { ...init, headers });
-}
-
-async function tryRefresh(): Promise<boolean> {
-  const refresh = getRefreshToken();
-  if (!refresh) return false;
-  const res = await rawFetch(
-    "/api/v1/auth/refresh",
-    {
-      method: "POST",
-      body: JSON.stringify({ refresh_token: refresh }),
-    },
-    false,
-  );
-  if (!res.ok) {
-    clearTokens();
-    return false;
-  }
-  const data = (await res.json()) as TokenResponse;
-  saveTokens(data.access_token, data.refresh_token);
-  return true;
 }
 
 async function parseError(res: Response): Promise<ApiError | null> {
@@ -69,16 +32,17 @@ async function parseError(res: Response): Promise<ApiError | null> {
 export async function apiFetch<T>(
   path: string,
   init: RequestInit = {},
-  options: { auth?: boolean } = {},
 ): Promise<T> {
-  const auth = options.auth ?? true;
-  let res = await rawFetch(path, init, auth);
-  if (res.status === 401 && auth) {
-    const refreshed = await tryRefresh();
-    if (refreshed) {
-      res = await rawFetch(path, init, auth);
-    }
+  const url = toProxiedApiPath(path);
+  const headers = new Headers(init.headers ?? {});
+  if (
+    init.body !== undefined &&
+    !headers.has("Content-Type") &&
+    !(init.body instanceof FormData)
+  ) {
+    headers.set("Content-Type", "application/json");
   }
+  const res = await fetch(url, { ...init, headers, credentials: "include" });
   if (!res.ok) {
     const body = await parseError(res);
     const detail =
@@ -89,4 +53,39 @@ export async function apiFetch<T>(
   return (await res.json()) as T;
 }
 
-export const apiBaseUrl = API_BASE_URL;
+export async function sessionLogin(
+  email: string,
+  password: string,
+): Promise<void> {
+  const res = await fetch("/api/session/login", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify({ email, password }),
+  });
+  if (!res.ok) {
+    const body = await parseError(res);
+    const detail =
+      typeof body?.detail === "string" ? body.detail : `HTTP ${res.status}`;
+    throw new ApiRequestError(res.status, detail, body);
+  }
+}
+
+export async function sessionRegister(payload: {
+  email: string;
+  password: string;
+  display_name: string;
+}): Promise<void> {
+  const res = await fetch("/api/session/register", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) {
+    const body = await parseError(res);
+    const detail =
+      typeof body?.detail === "string" ? body.detail : `HTTP ${res.status}`;
+    throw new ApiRequestError(res.status, detail, body);
+  }
+}

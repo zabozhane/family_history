@@ -159,7 +159,7 @@ Completion note:
 - `docker-compose.yml`: `web.build.args.NEXT_PUBLIC_API_BASE_URL` honors the same env value.
 - `apps/web/lib/{types,auth,api,styles}.ts`: typed `apiFetch<T>` with one silent refresh on 401, localStorage tokens, inline-style atoms.
 - Pages: `app/login/page.tsx`, `app/register/page.tsx`, `app/me/page.tsx`, updated `app/page.tsx` with anonymous landing links.
-- Every UI file carries `// TODO(T12)` markers so the proper Tailwind/shadcn rebuild has clear hooks.
+- ~~Every UI file carried `// TODO(T12)` markers~~ — superseded by **T12** (markers removed from `apps/web`).
 
 Tested:
 - `docker compose build api web` + `docker compose up -d` — both healthy.
@@ -288,9 +288,9 @@ Tested:
   - user B `GET /assets/{family}` => **200**,
   - user B `GET /assets?limit=200` includes only visible items.
 
-## T10 — Build typed, versioned FastAPI RESTful API with OpenAPI docs
+## T10 — Build typed, versioned FastAPI RESTful API with OpenAPI docs  [DONE]
 Priority: High
-Status: Pending — next recommended task
+Status: Done (session 10)
 
 Define typed API endpoints for authentication, media upload, timeline retrieval, permission checks, and document API versions with OpenAPI specification.
 
@@ -299,8 +299,29 @@ Depends on:
 - T6
 - T9
 
-## T11 — Implement foundational timeline aggregation model
+Completion note:
+- Added typed timeline schemas in `apps/api/app/schemas/timeline.py`.
+- Added timeline endpoint `GET /api/v1/timeline` in `apps/api/app/api/v1/timeline.py` and mounted router in `api/v1/router.py`.
+- Extended assets API with typed permission-check endpoint:
+  - `GET /api/v1/assets/{asset_id}/permission`.
+- Extended upload contract:
+  - `POST /api/v1/assets` now supports `permission_scope` in multipart form (default `private`).
+- Added automatic timeline event creation on upload:
+  - each upload creates `TimelineEntry(kind=asset_added)` with typed payload.
+- OpenAPI `/docs` now includes typed routes for auth, assets (upload/list/get/permission), users/me, admin ping, and timeline retrieval under `/api/v1`.
+
+Tested:
+- `python3 -m compileall -q apps/api/app` — OK.
+- `docker compose build api && docker compose up -d api` — OK.
+- `docker compose exec api alembic upgrade head` — OK.
+- E2E:
+  - upload `family` asset => `GET /api/v1/assets/{id}` as second user => **200**,
+  - `GET /api/v1/assets/{id}/permission` => **200** with typed keys,
+  - `GET /api/v1/timeline?limit=20` => **200** and includes uploaded `asset_id`.
+
+## T11 — Implement foundational timeline aggregation model  [DONE]
 Priority: Medium
+Status: Done (session 11)
 
 Develop backend logic to aggregate Assets, AssetVersions, and TimelineEntries into a unified timeline view respecting permissions and filter criteria.
 
@@ -308,8 +329,31 @@ Depends on:
 - T4
 - T9
 
-## T12 — Create Next.js frontend shell with authentication integration
+Completion note:
+- Reworked `GET /api/v1/timeline` into an aggregated timeline endpoint:
+  - joins `timeline_entries` with related `assets` and primary `asset_versions`.
+- Added typed aggregation schemas in `apps/api/app/schemas/timeline.py`:
+  - `TimelineItemRead`, `TimelineAssetRead`, `TimelineAssetVersionRead`.
+- Added permission-aware and filterable retrieval in `apps/api/app/api/v1/timeline.py`:
+  - filters: `from`, `to`, `asset_type`, `kind`, `limit`, `offset`.
+  - non-admin visibility combines own entries + readable asset-linked entries.
+- Timeline response now includes, per item:
+  - base entry fields,
+  - optional embedded `asset`,
+  - optional embedded `primary_version`.
+
+Tested:
+- `python3 -m compileall -q apps/api/app` — OK.
+- `docker compose build api && docker compose up -d api` — OK.
+- `docker compose exec api alembic upgrade head` — OK.
+- E2E:
+  - upload `family` image asset,
+  - `GET /api/v1/timeline?asset_type=image&kind=asset_added&limit=20` => **200**,
+  - response items contain `asset` and `primary_version` objects and include uploaded `asset_id`.
+
+## T12 — Create Next.js frontend shell with authentication integration  [DONE]
 Priority: High
+Status: Done
 
 Implement frontend authentication flows using JWT tokens from API, including login, logout, and protected routes with Tailwind and shadcn/ui components.
 
@@ -318,8 +362,19 @@ Depends on:
 
 Note: This task SUPERSEDES T12a — rebuild the auth screens on Tailwind + shadcn/ui, revisit token storage strategy (localStorage → httpOnly cookies), and remove all `// TODO(T12)` markers in `apps/web`.
 
-## T13 — Implement basic photo gallery and music playback
+Completion note:
+- Tailwind + PostCSS + `tailwindcss-animate`; minimal shadcn-style primitives in `components/ui/` (`Button`, `Input`, `Label`, `Card`) and `app/globals.css`.
+- JWTs stored in **httpOnly** cookies only (`fms_access`, `fms_refresh`). Route handlers: `/api/session/login`, `/api/session/register`, `/api/session/logout`; BFF proxy `/api/fms/[...path]` forwards to FastAPI and performs server-side refresh when upstream returns 401.
+- `middleware.ts` redirects unauthenticated visits away from `/me` to `/login`.
+- `API_INTERNAL_BASE_URL` (default `http://api:8000` in Compose) for server-side fetches from the `web` container; browsers continue using `NEXT_PUBLIC_API_BASE_URL` for same-origin `/api/*`.
+- Removed `lib/styles.ts`; cleared all `// TODO(T12)` markers under `apps/web`.
+
+Tested:
+- `npm install && npm run build` in `apps/web` — OK.
+
+## T13 — Implement basic photo gallery and music playback  [DONE]
 Priority: Medium
+Status: Done
 
 Develop UI components for browsing photo gallery and playing music tracks with basic playback controls consuming API data.
 
@@ -327,8 +382,17 @@ Depends on:
 - T12
 - T10
 
-## T14 — Implement timeline navigation and filtering UI
+Completion note:
+- **API**: `AssetRead` now includes optional `primary_version`; `GET /api/v1/assets` and `GET /api/v1/assets/{id}` eager-load versions. New **`GET /api/v1/assets/{asset_id}/file`** streams the primary version from MinIO/S3 (`iter_object_chunks`, `head_object_exists` in `app/storage/s3.py`) with permission checks.
+- **Web**: `SiteNav` in root layout; protected routes **`/gallery`** and **`/music`** (middleware). Pages load assets via `apiFetch`, filter by `asset_type`, render images from `/api/fms/v1/assets/{id}/file` and HTML5 `<audio controls>`. Types in `lib/types.ts`, helper `lib/media-url.ts`.
+
+Tested:
+- Python AST parse on touched API files — OK.
+- `npm run build` in `apps/web` — OK.
+
+## T14 — Implement timeline navigation and filtering UI  [DONE]
 Priority: Medium
+Status: Done
 
 Develop frontend timeline view with filtering by time ranges and asset types, integrating API timeline endpoints and updating UI accordingly.
 
@@ -336,11 +400,31 @@ Depends on:
 - T12
 - T11
 
-## T15 — Implement environment configuration and strict typing across codebase
+Completion note:
+- **`/timeline`**: client page with filters mapped to `GET /api/v1/timeline` (`from`/`to` as ISO datetimes from `datetime-local`, `asset_type`, `kind`), Apply / Reset, and **Load more** pagination (`offset`/`limit`).
+- Cards show kind badge, `occurred_at`, linked asset title/type/scope, payload summary for uploads, optional **image thumbnail** via `assetFileUrl` when `asset_type === image`.
+- Types: `TimelineItemRead` and related in `lib/types.ts`; query helper `lib/timeline-query.ts`.
+- **Middleware** + **SiteNav** + home CTA include `/timeline` (auth-gated like gallery/music).
+
+Tested:
+- `npm run build` in `apps/web` — OK.
+
+## T15 — Implement environment configuration and strict typing across codebase  [DONE]
 Priority: Medium
+Status: Done
 
 Ensure all components (api, web, worker) use environment variables for config and enforce TypeScript/Python strict typing for code quality.
 
 Depends on:
 - T1
+
+Completion note:
+- **Web**: `tsconfig.json` adds `noUncheckedIndexedAccess`, `noImplicitOverride`, `noUnusedLocals`, `noUnusedParameters`; server env accessors live in **`lib/env/server.ts`** (used via `lib/server/backend-url.ts`).
+- **API**: `Settings` loads optional **`.env`** via pydantic-settings; **`reject_weak_secret_in_production`** validator blocks default/short secrets when `API_ENV=production`. ORM-facing schemas use **`model_config: ClassVar[ConfigDict]`** for Pyright-friendly Pydantic v2 typing.
+- **Worker**: same **`.env`** file hook on `Settings`; **`apps/worker/pyproject.toml`** + **`requirements-dev.txt`** for Pyright.
+- **Tooling**: **`apps/api/pyproject.toml`**, **`apps/api/requirements-dev.txt`**, worker counterparts; **`.env.example`** documents web internal URL + worker/pyright usage.
+
+Tested:
+- `npm run build` and `npm run typecheck` in `apps/web` — OK.
+- Python AST parse on touched API/worker modules — OK.
 

@@ -1,8 +1,11 @@
 """Async S3-compatible uploads using aioboto3 (works with MinIO via path-style)."""
 from __future__ import annotations
 
+from collections.abc import AsyncIterator
+
 import aioboto3
 from botocore.config import Config
+from botocore.exceptions import ClientError
 
 from app.core.config import settings
 
@@ -31,3 +34,28 @@ async def put_object(key: str, body: bytes, content_type: str) -> None:
             Body=body,
             ContentType=content_type,
         )
+
+
+async def iter_object_chunks(key: str, chunk_size: int = 65536) -> AsyncIterator[bytes]:
+    """Stream object bytes from the configured bucket (raises ClientError on failure)."""
+    async with _session.client("s3", **_client_kwargs()) as client:
+        response = await client.get_object(Bucket=settings.S3_BUCKET, Key=key)
+        body = response["Body"]
+        while True:
+            chunk = await body.read(chunk_size)
+            if not chunk:
+                break
+            yield chunk
+
+
+async def head_object_exists(key: str) -> bool:
+    """Return True if the object exists (False for missing key)."""
+    async with _session.client("s3", **_client_kwargs()) as client:
+        try:
+            await client.head_object(Bucket=settings.S3_BUCKET, Key=key)
+            return True
+        except ClientError as exc:
+            code = exc.response.get("Error", {}).get("Code", "")
+            if code in ("404", "NoSuchKey", "NotFound"):
+                return False
+            raise

@@ -1,24 +1,20 @@
 "use client";
 
-// TODO(T12): rebuild on shadcn/ui (Form, Input, Button) + react-hook-form + zod.
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
 
-import { ApiRequestError, apiFetch } from "../../lib/api";
-import { saveTokens } from "../../lib/auth";
+import { Button } from "@/components/ui/button";
 import {
-  card,
-  errorBox,
-  heading,
-  input,
-  label,
-  link,
-  pageWrap,
-  primaryButton,
-  subtle,
-} from "../../lib/styles";
-import type { TokenResponse } from "../../lib/types";
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { ApiRequestError, sessionLogin } from "@/lib/api";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -32,15 +28,7 @@ export default function LoginPage() {
     setError(null);
     setSubmitting(true);
     try {
-      const tokens = await apiFetch<TokenResponse>(
-        "/api/v1/auth/login",
-        {
-          method: "POST",
-          body: JSON.stringify({ email, password }),
-        },
-        { auth: false },
-      );
-      saveTokens(tokens.access_token, tokens.refresh_token);
+      await sessionLogin(email, password);
       router.push("/me");
     } catch (err) {
       if (err instanceof ApiRequestError) {
@@ -54,51 +42,58 @@ export default function LoginPage() {
   }
 
   return (
-    <main style={pageWrap}>
-      <form onSubmit={handleSubmit} style={card}>
-        <h1 style={heading}>Welcome back</h1>
-        <p style={subtle}>Sign in to your family workspace.</p>
+    <main className="flex min-h-screen flex-col items-center justify-center px-4 py-10">
+      <Card className="w-full max-w-md">
+        <CardHeader>
+          <CardTitle>Welcome back</CardTitle>
+          <CardDescription>Sign in to your family workspace.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+            {error && (
+              <div className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+                {error}
+              </div>
+            )}
 
-        {error && <div style={errorBox}>{error}</div>}
+            <div className="space-y-2">
+              <Label htmlFor="email">Email</Label>
+              <Input
+                id="email"
+                type="email"
+                autoComplete="email"
+                required
+                value={email}
+                onChange={(ev) => setEmail(ev.target.value)}
+              />
+            </div>
 
-        <label style={label} htmlFor="email">
-          Email
-        </label>
-        <input
-          id="email"
-          type="email"
-          autoComplete="email"
-          required
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          style={input}
-        />
+            <div className="space-y-2">
+              <Label htmlFor="password">Password</Label>
+              <Input
+                id="password"
+                type="password"
+                autoComplete="current-password"
+                required
+                minLength={8}
+                value={password}
+                onChange={(ev) => setPassword(ev.target.value)}
+              />
+            </div>
 
-        <label style={label} htmlFor="password">
-          Password
-        </label>
-        <input
-          id="password"
-          type="password"
-          autoComplete="current-password"
-          required
-          minLength={8}
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          style={input}
-        />
+            <Button type="submit" disabled={submitting} className="w-full">
+              {submitting ? "Signing in…" : "Sign in"}
+            </Button>
 
-        <button type="submit" disabled={submitting} style={primaryButton}>
-          {submitting ? "Signing in…" : "Sign in"}
-        </button>
-
-        <p style={{ marginTop: "1rem", fontSize: "0.85rem", opacity: 0.7 }}>
-          New here?{" "}
-          <Link href="/register" style={link}>
-            Create an account
-          </Link>
-        </p>
-      </form>
+            <p className="text-center text-sm text-muted-foreground">
+              New here?{" "}
+              <Link href="/register" className="font-medium text-primary hover:underline">
+                Create an account
+              </Link>
+            </p>
+          </form>
+        </CardContent>
+      </Card>
     </main>
   );
 }

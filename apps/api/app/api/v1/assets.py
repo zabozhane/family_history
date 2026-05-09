@@ -2,23 +2,26 @@
 from __future__ import annotations
 
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import PurePosixPath
 from uuid import UUID, uuid4
 
 from botocore.exceptions import BotoCoreError, ClientError
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile, status
+from fastapi.responses import StreamingResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.api.deps import get_current_user, get_db
 from app.core.config import settings
 from app.db.models.asset import Asset, AssetType, PermissionScope
 from app.db.models.asset_version import AssetVersion
-from app.db.models.user import User
+from app.db.models.timeline_entry import TimelineEntry, TimelineEntryKind
+from app.db.models.user import User, UserRole
 from app.permissions.assets import asset_read_filter_for_user, can_read_asset
-from app.schemas.asset import AssetRead, AssetUploadResponse
-from app.storage.s3 import put_object
+from app.schemas.asset import AssetPermissionRead, AssetRead, AssetUploadResponse, AssetVersionRead
+from app.storage.s3 import head_object_exists, iter_object_chunks, put_object
 from app.tasks_media import extract_asset_version_metadata
 
 logger = logging.getLogger(__name__)
@@ -78,6 +81,46 @@ def _parse_captured_at(raw: str | None) -> datetime | None:
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="captured_at must be ISO 8601 datetime",
         ) from exc
+
+
+async def _load_asset_or_404(db: AsyncSession, asset_id: UUID) -> Asset:
+    result = await db.execute(select(Asset).where(Asset.id == asset_id))
+    asset = result.scalar_one_or_none()
+    if asset is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Asset not found")
+    return asset
+
+
+async def _load_asset_with_versions(db: AsyncSession, asset_id: UUID) -> Asset | None:
+    result = await db.execute(
+        select(Asset)
+        .where(Asset.id == asset_id)
+        .options(selectinload(Asset.versions)),
+    )
+    return result.scalar_one_or_none()
+
+
+def _pick_primary_version(asset: Asset) -> AssetVersion | None:
+    if not asset.versions:
+        return None
+    for version in asset.versions:
+        if version.is_primary:
+            return version
+    return max(asset.versions, key=lambda v: v.created_at)
+
+
+def serialize_asset_read(asset: Asset) -> AssetRead:
+    primary = _pick_primary_version(asset)
+    return AssetRead(
+        id=asset.id,
+        owner_id=asset.owner_id,
+        asset_type=asset.asset_type,
+        title=asset.title,
+        description=asset.description,
+        captured_at=asset.captured_at,
+        permission_scope=asset.permission_scope,
+        primary_version=AssetVersionRead.model_validate(primary) if primary else None,
+    )
 
 
 @router.post(
@@ -141,9 +184,21 @@ async def upload_asset(
         duration_ms=None,
         is_primary=True,
     )
+    timeline_entry = TimelineEntry(
+        user_id=user.id,
+        asset_id=asset_id,
+        kind=TimelineEntryKind.asset_added,
+        occurred_at=ct_parsed or datetime.now(timezone.utc),
+        payload={
+            "event": "asset_uploaded",
+            "asset_type": asset_type.value,
+            "permission_scope": permission_scope.value,
+        },
+    )
 
     db.add(asset)
     db.add(version)
+    db.add(timeline_entry)
     await db.flush()
 
     try:
@@ -168,7 +223,18 @@ async def upload_asset(
             version.id,
         )
 
-    return AssetUploadResponse(asset=asset, version=version)
+    ver_read = AssetVersionRead.model_validate(version)
+    asset_read = AssetRead(
+        id=asset.id,
+        owner_id=asset.owner_id,
+        asset_type=asset.asset_type,
+        title=asset.title,
+        description=asset.description,
+        captured_at=asset.captured_at,
+        permission_scope=asset.permission_scope,
+        primary_version=ver_read,
+    )
+    return AssetUploadResponse(asset=asset_read, version=ver_read)
 
 
 @router.get("", response_model=list[AssetRead])
@@ -181,12 +247,48 @@ async def list_assets(
     stmt = (
         select(Asset)
         .where(asset_read_filter_for_user(user))
+        .options(selectinload(Asset.versions))
         .order_by(Asset.created_at.desc())
         .limit(limit)
         .offset(offset)
     )
     result = await db.execute(stmt)
-    return list(result.scalars().all())
+    rows = result.scalars().unique().all()
+    return [serialize_asset_read(row) for row in rows]
+
+
+@router.get("/{asset_id}/file")
+async def stream_asset_file(
+    asset_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> StreamingResponse:
+    asset = await _load_asset_with_versions(db, asset_id)
+    if asset is None or not can_read_asset(user, asset):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Asset not found")
+    primary = _pick_primary_version(asset)
+    if primary is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No media version for asset",
+        )
+    if not await head_object_exists(primary.storage_key):
+        logger.error("Storage object missing for asset_id=%s key=%s", asset_id, primary.storage_key)
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Media object missing",
+        )
+
+    filename = (asset.title or str(asset.id)).replace('"', "")[:200]
+    headers = {
+        "Content-Disposition": f'inline; filename="{filename}"',
+        "Cache-Control": "private, max-age=3600",
+    }
+    return StreamingResponse(
+        iter_object_chunks(primary.storage_key),
+        media_type=primary.mime_type,
+        headers=headers,
+    )
 
 
 @router.get("/{asset_id}", response_model=AssetRead)
@@ -195,11 +297,30 @@ async def get_asset(
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
 ) -> AssetRead:
-    result = await db.execute(select(Asset).where(Asset.id == asset_id))
-    asset = result.scalar_one_or_none()
+    asset = await _load_asset_with_versions(db, asset_id)
     if asset is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Asset not found")
     if not can_read_asset(user, asset):
         # Return 404 to avoid leaking existence.
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Asset not found")
-    return asset
+    return serialize_asset_read(asset)
+
+
+@router.get("/{asset_id}/permission", response_model=AssetPermissionRead)
+async def get_asset_permission(
+    asset_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> AssetPermissionRead:
+    asset = await _load_asset_or_404(db, asset_id)
+    if not can_read_asset(user, asset):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Asset not found")
+    is_owner = asset.owner_id == user.id
+    can_edit = is_owner or user.role == UserRole.admin
+    return AssetPermissionRead(
+        asset_id=asset.id,
+        permission_scope=asset.permission_scope,
+        is_owner=is_owner,
+        can_read=True,
+        can_edit=can_edit,
+    )

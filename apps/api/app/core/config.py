@@ -9,7 +9,9 @@ from functools import lru_cache
 
 from urllib.parse import quote_plus
 
-from pydantic import Field
+from typing import Self
+
+from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -17,6 +19,8 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(
         case_sensitive=True,
         extra="ignore",
+        env_file=".env",
+        env_file_encoding="utf-8",
     )
 
     # --- API ---
@@ -48,6 +52,17 @@ class Settings(BaseSettings):
 
     # Upload limits (skeleton — tighten per env in prod).
     API_UPLOAD_MAX_BYTES: int = Field(default=102_400_000)
+
+    @model_validator(mode="after")
+    def reject_weak_secret_in_production(self) -> Self:
+        if self.API_ENV.strip().lower() != "production":
+            return self
+        secret = self.API_SECRET_KEY.strip()
+        weak = {"", "change-me", "changeme", "secret"}
+        if secret.lower() in weak or len(secret) < 24:
+            msg = "API_SECRET_KEY must be a long random value when API_ENV=production"
+            raise ValueError(msg)
+        return self
 
     # --- Redis (Dramatiq broker — T7+) ---
     REDIS_HOST: str = Field(default="redis")
