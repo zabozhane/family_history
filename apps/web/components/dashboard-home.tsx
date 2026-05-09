@@ -18,6 +18,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { AssetImageThumb } from "@/components/asset-image-thumb";
 import { ApiRequestError, apiFetch } from "@/lib/api";
 import { assetFileUrl } from "@/lib/media-url";
 import type { AssetRead } from "@/lib/types";
@@ -379,18 +380,10 @@ export function DashboardHome() {
               <li key={asset.id}>
                 <Card className="overflow-hidden py-0">
                   <div className="aspect-square bg-muted">
-                    {asset.primary_version ? (
-                      <img
-                        src={assetFileUrl(asset.id)}
-                        alt={asset.title ?? "Photo"}
-                        className="h-full w-full object-cover"
-                        loading="lazy"
-                      />
-                    ) : (
-                      <div className="flex h-full items-center justify-center p-2 text-center text-xs text-muted-foreground">
-                        No file
-                      </div>
-                    )}
+                    <AssetImageThumb
+                      assetId={asset.id}
+                      alt={asset.title ?? "Photo"}
+                    />
                   </div>
                   <CardContent className="p-2">
                     <p className="truncate text-xs font-medium">

@@ -57,6 +57,12 @@ export interface AssetRead {
   primary_version: AssetVersionRead | null;
 }
 
+/** Mirrors `AssetUploadResponse` from apps/api `schemas/asset.py`. */
+export interface AssetUploadResponse {
+  asset: AssetRead;
+  version: AssetVersionRead;
+}
+
 export type TimelineEntryKind = "asset_added" | "event" | "activity";
 
 export interface TimelineAssetVersionRead {

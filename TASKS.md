@@ -504,9 +504,9 @@ Completion note:
 Tested:
 - `npm run typecheck` && `npm run build` in `apps/web` — OK.
 
-## T18 — Photos page: browsing + upload new media  [TODO]
+## T18 — Photos page: browsing + upload new media  [DONE]
 Priority: Medium
-Status: Pending
+Status: Done
 
 Dedicated **Photos** experience: grid/list of images as today plus **upload** via multipart **`POST /api/v1/assets`** (through BFF with cookie auth). Simple form: file input(s), optional title/description/captured date if API accepts them; success refreshes list and surfaces errors. Keep scope to images first unless API already treats audio uniformly.
 
@@ -514,10 +514,31 @@ Depends on:
 - T16
 - T10
 
+Completion note:
+- **`GalleryUploadForm`** (`components/gallery-upload-form.tsx`): multipart **`apiUploadAsset`** → **`/api/fms/v1/assets`** (`credentials: include`); **`file`** + **`permission_scope`** only (title/description/capture date dropped per UX — **`T21`**).
+- **`lib/api.ts`**: **`apiUploadAsset`**, shared **`formatApiDetail`** for FastAPI string/array **`detail`**; **`apiFetch`** errors use same formatter.
+- **`lib/types.ts`**: **`AssetUploadResponse`**.
+- **`/gallery`**: upload card above grid; **`reloadAssets({ silent: true })`** after upload (silent refresh failures keep existing grid).
+
 Completion criteria (DoD):
 - User can add at least one new image from the Photos route and see it in the list after upload.
 - Errors from API are shown inline or via toast pattern consistent with the app.
 
 Tested:
-- (pending) `npm run typecheck` && `npm run build`; manual upload against Compose API.
+- `npm run typecheck` && `npm run build` in `apps/web` — OK.
+- Manual: Compose stack — upload image on **`/gallery`**, grid refreshes.
 
+## T21 — Fix asset list `primary_version` (gallery thumbnails)  [DONE]
+Priority: Medium
+Status: Done
+
+**`GET /api/v1/assets`** sometimes returned **`primary_version: null`** while rows existed in **`asset_versions`**, so the web gallery showed **No file** / **Untitled** thumbnails. Root fix: load **`Asset`** rows and **`AssetVersion`** rows in two queries, bucket by **`asset_id`**, and pass **`version_rows`** into **`serialize_asset_read`**; **`GET …/{id}`** / file stream use **`set_committed_value`** on **`versions`** after explicit **`AssetVersion`** query.
+
+Depends on:
+- T10
+
+Completion note:
+- **`apps/api/app/api/v1/assets.py`**: removed **`selectinload`** list path; **`_pick_primary_version_from_rows`**; **`serialize_asset_read(..., version_rows=...)`**.
+
+Tested:
+- Python AST parse **`assets.py`** — OK; **`npm run build`** (**`apps/web`**) — OK.

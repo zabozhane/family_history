@@ -1,30 +1,28 @@
 # Session Handoff
 
 ## Completed In This Session
-**T20 — Dashboard timeline: data-driven years + chevron months (name + emoji).**
+**Gallery UX trim + API list hydration fix.**
 
-- **Years**: only calendar years that occur on any asset **`captured_at`** in the **`limit=200`** fetch (newest first). If none → single **current year** + amber helper text.
-- **Month strip**: **chevron** segments (`clip-path` + pixel overlap), **full month name** via **`Intl`**, **seasonal emoji** per month (❄️ / 🌱 / ☀️ / 🍂 …), **season-tinted gradients**.
-- Filtering for photos/player unchanged (**local** month vs **`captured_at`**).
+- **Photos upload form**: only **file** + **who can see it** (removed title / capture date / description).
+- **T21 / API**: **`GET /api/v1/assets`** now attaches **`primary_version`** reliably via explicit **`asset_versions`** query + **`serialize_asset_read(..., version_rows=…)`**; **`_load_asset_with_versions`** uses **`set_committed_value`** so **`GET /{id}`** and **`/file`** keep working — fixes **No file** thumbnails after upload.
 
-Convention: new shipped behavior documented under **`TASKS.md`** **`T*`** + this file (**`CURSOR_EXECUTION_MODE.md`** § artifact policy).
+Convention: **`TASKS.md`** **`T21`** + this file.
 
 ## Test Summary
-- `npm run typecheck` && `npm run build` in **`apps/web`** — OK.
+- Python **`assets.py`** AST parse — OK.
+- **`npm run build`** in **`apps/web`** — OK.
 
 ## How To Test (repeatable)
-- **`/`** with uploads only in e.g. **2024** → year row shows **2024** only (plus others only if dated assets exist).
-- Resize narrow viewport → month chevrons scroll horizontally (**`min-w-[640px]`** strip).
+- **`docker compose build api web && docker compose up -d`**, upload on **`/gallery`** → thumbnails load (**`/api/fms/v1/assets/{id}/file`**).
 
 ## Current Stack State
-**T1–T17**, **T19**, **T20** done (**T19** note points here for final UX). **T18** pending — Photos multipart upload.
+Through **T21** in **`TASKS.md`** (incremental fixes after **T18**).
 
 ## Known Issues / Risks
-- Years inferred only from **first 200** assets returned by API (same ceiling as dashboard load).
-- Undated assets do not create year tabs.
+- BFF **401 refresh** + multipart replay unchanged.
 
 ## Next Recommended Task
-**T18 — Photos page: browsing + upload new media.**
+Backlog polish (music upload parity, dashboard **`limit`** / date filters).
 
 ## Notes For Next Session
-- Optional: API **`captured_after/before`** or pagination so year discovery scales beyond 200 rows.
+- None.

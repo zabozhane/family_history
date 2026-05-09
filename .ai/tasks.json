@@ -189,6 +189,15 @@
         "T16",
         "T10"
       ]
+    },
+    {
+      "id": "T21",
+      "title": "Fix GET /api/v1/assets primary_version hydration",
+      "description": "Ensure list/detail/file routes populate primary_version from asset_versions via explicit queries so gallery thumbnails work.",
+      "priority": "Medium",
+      "depends_on": [
+        "T10"
+      ]
     }
   ]
 }
