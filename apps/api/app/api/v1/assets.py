@@ -7,7 +7,8 @@ from pathlib import PurePosixPath
 from uuid import UUID, uuid4
 
 from botocore.exceptions import BotoCoreError, ClientError
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile, status
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user, get_db
@@ -15,7 +16,8 @@ from app.core.config import settings
 from app.db.models.asset import Asset, AssetType, PermissionScope
 from app.db.models.asset_version import AssetVersion
 from app.db.models.user import User
-from app.schemas.asset import AssetUploadResponse
+from app.permissions.assets import asset_read_filter_for_user, can_read_asset
+from app.schemas.asset import AssetRead, AssetUploadResponse
 from app.storage.s3 import put_object
 from app.tasks_media import extract_asset_version_metadata
 
@@ -88,6 +90,7 @@ async def upload_asset(
     title: str | None = Form(None),
     description: str | None = Form(None),
     captured_at: str | None = Form(None),
+    permission_scope: PermissionScope = Form(PermissionScope.private),
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
 ) -> AssetUploadResponse:
@@ -125,7 +128,7 @@ async def upload_asset(
         title=title.strip() if title else None,
         description=description.strip() if description else None,
         captured_at=ct_parsed,
-        permission_scope=PermissionScope.private,
+        permission_scope=permission_scope,
     )
     version = AssetVersion(
         id=version_id,
@@ -166,3 +169,37 @@ async def upload_asset(
         )
 
     return AssetUploadResponse(asset=asset, version=version)
+
+
+@router.get("", response_model=list[AssetRead])
+async def list_assets(
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> list[AssetRead]:
+    stmt = (
+        select(Asset)
+        .where(asset_read_filter_for_user(user))
+        .order_by(Asset.created_at.desc())
+        .limit(limit)
+        .offset(offset)
+    )
+    result = await db.execute(stmt)
+    return list(result.scalars().all())
+
+
+@router.get("/{asset_id}", response_model=AssetRead)
+async def get_asset(
+    asset_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> AssetRead:
+    result = await db.execute(select(Asset).where(Asset.id == asset_id))
+    asset = result.scalar_one_or_none()
+    if asset is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Asset not found")
+    if not can_read_asset(user, asset):
+        # Return 404 to avoid leaking existence.
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Asset not found")
+    return asset

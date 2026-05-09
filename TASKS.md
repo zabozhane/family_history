@@ -257,17 +257,40 @@ Tested:
 - E2E: register + upload tiny PNG → worker log contains `extracted metadata` entry with the uploaded `version_id`.
 - DB check for uploaded `version_id`: `width=1`, `height=1`, `duration_ms=null`, and populated `metadata` JSON.
 
-## T9 — Develop permission system for private, family, shared scopes
+## T9 — Develop permission system for private, family, shared scopes  [DONE]
 Priority: Medium
-Status: Pending — next recommended task
+Status: Done (session 9)
 
 Implement framework in API backend to check and enforce asset permissions based on scopes for users across all relevant endpoints.
 
 Depends on:
 - T5
 
+Completion note:
+- Added `apps/api/app/permissions/assets.py` with centralized visibility policy:
+  - `can_read_asset(user, asset)` for per-record checks,
+  - `asset_read_filter_for_user(user)` for SQL-level filtering.
+- Updated `POST /api/v1/assets` to accept `permission_scope` (defaults to `private`).
+- Added read endpoints in `apps/api/app/api/v1/assets.py`:
+  - `GET /api/v1/assets` (paginated list of visible assets),
+  - `GET /api/v1/assets/{asset_id}` (404 when missing or not visible).
+- Policy behavior in MVP:
+  - `private` => owner/admin only,
+  - `family`/`shared`/`public_link` => visible to authenticated users (plus owner/admin).
+
+Tested:
+- `python3 -m compileall -q apps/api/app` — OK.
+- `docker compose build api && docker compose up -d api` — OK.
+- `docker compose exec api alembic upgrade head` — OK.
+- E2E with 2 users:
+  - user A uploads one `private` and one `family` asset,
+  - user B `GET /assets/{private}` => **404**,
+  - user B `GET /assets/{family}` => **200**,
+  - user B `GET /assets?limit=200` includes only visible items.
+
 ## T10 — Build typed, versioned FastAPI RESTful API with OpenAPI docs
 Priority: High
+Status: Pending — next recommended task
 
 Define typed API endpoints for authentication, media upload, timeline retrieval, permission checks, and document API versions with OpenAPI specification.
 
