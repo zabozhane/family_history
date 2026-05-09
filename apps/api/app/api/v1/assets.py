@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Sequence
 from datetime import datetime, timezone
 from pathlib import PurePosixPath
 from uuid import UUID, uuid4
@@ -11,7 +12,7 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Upload
 from fastapi.responses import StreamingResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
+from sqlalchemy.orm.attributes import set_committed_value
 
 from app.api.deps import get_current_user, get_db
 from app.core.config import settings
@@ -92,25 +93,32 @@ async def _load_asset_or_404(db: AsyncSession, asset_id: UUID) -> Asset:
 
 
 async def _load_asset_with_versions(db: AsyncSession, asset_id: UUID) -> Asset | None:
-    result = await db.execute(
-        select(Asset)
-        .where(Asset.id == asset_id)
-        .options(selectinload(Asset.versions)),
-    )
-    return result.scalar_one_or_none()
-
-
-def _pick_primary_version(asset: Asset) -> AssetVersion | None:
-    if not asset.versions:
+    result = await db.execute(select(Asset).where(Asset.id == asset_id))
+    asset = result.scalar_one_or_none()
+    if asset is None:
         return None
-    for version in asset.versions:
+    vres = await db.execute(select(AssetVersion).where(AssetVersion.asset_id == asset_id))
+    versions = list(vres.scalars().all())
+    set_committed_value(asset, "versions", versions)
+    return asset
+
+
+def _pick_primary_version_from_rows(versions: Sequence[AssetVersion]) -> AssetVersion | None:
+    if not versions:
+        return None
+    for version in versions:
         if version.is_primary:
             return version
-    return max(asset.versions, key=lambda v: v.created_at)
+    return max(versions, key=lambda v: v.created_at)
 
 
-def serialize_asset_read(asset: Asset) -> AssetRead:
-    primary = _pick_primary_version(asset)
+def serialize_asset_read(
+    asset: Asset,
+    *,
+    version_rows: Sequence[AssetVersion] | None = None,
+) -> AssetRead:
+    rows = list(version_rows) if version_rows is not None else list(asset.versions)
+    primary = _pick_primary_version_from_rows(rows)
     return AssetRead(
         id=asset.id,
         owner_id=asset.owner_id,
@@ -118,6 +126,7 @@ def serialize_asset_read(asset: Asset) -> AssetRead:
         title=asset.title,
         description=asset.description,
         captured_at=asset.captured_at,
+        created_at=asset.created_at,
         permission_scope=asset.permission_scope,
         primary_version=AssetVersionRead.model_validate(primary) if primary else None,
     )
@@ -231,6 +240,7 @@ async def upload_asset(
         title=asset.title,
         description=asset.description,
         captured_at=asset.captured_at,
+        created_at=asset.created_at,
         permission_scope=asset.permission_scope,
         primary_version=ver_read,
     )
@@ -247,14 +257,25 @@ async def list_assets(
     stmt = (
         select(Asset)
         .where(asset_read_filter_for_user(user))
-        .options(selectinload(Asset.versions))
         .order_by(Asset.created_at.desc())
         .limit(limit)
         .offset(offset)
     )
     result = await db.execute(stmt)
-    rows = result.scalars().unique().all()
-    return [serialize_asset_read(row) for row in rows]
+    assets = result.scalars().all()
+    if not assets:
+        return []
+    asset_ids = [a.id for a in assets]
+    vstmt = select(AssetVersion).where(AssetVersion.asset_id.in_(asset_ids))
+    vrows = (await db.execute(vstmt)).scalars().all()
+    # Use string keys — avoids rare driver/type mismatches on UUID dict lookups.
+    by_asset: dict[str, list[AssetVersion]] = {}
+    for ver in vrows:
+        by_asset.setdefault(str(ver.asset_id), []).append(ver)
+    return [
+        serialize_asset_read(asset, version_rows=by_asset.get(str(asset.id), []))
+        for asset in assets
+    ]
 
 
 @router.get("/{asset_id}/file")
@@ -266,7 +287,7 @@ async def stream_asset_file(
     asset = await _load_asset_with_versions(db, asset_id)
     if asset is None or not can_read_asset(user, asset):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Asset not found")
-    primary = _pick_primary_version(asset)
+    primary = _pick_primary_version_from_rows(list(asset.versions))
     if primary is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,

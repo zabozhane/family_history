@@ -1,7 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
+import { AssetImageThumb } from "@/components/asset-image-thumb";
+import { GalleryUploadForm } from "@/components/gallery-upload-form";
 import {
   Card,
   CardContent,
@@ -10,105 +12,89 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { ApiRequestError, apiFetch } from "@/lib/api";
-import { assetFileUrl } from "@/lib/media-url";
 import type { AssetRead } from "@/lib/types";
 
 export default function GalleryPage() {
   const [assets, setAssets] = useState<AssetRead[]>([]);
-  const [error, setError] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    let cancelled = false;
-    apiFetch<AssetRead[]>("/api/v1/assets?limit=200")
-      .then((rows) => {
-        if (!cancelled) setAssets(rows.filter((a) => a.asset_type === "image"));
-      })
-      .catch((err) => {
-        if (!cancelled) {
-          setError(
-            err instanceof ApiRequestError
+  const reloadAssets = useCallback(async (opts?: { silent?: boolean }) => {
+    if (!opts?.silent) setLoading(true);
+    setLoadError(null);
+    try {
+      const rows = await apiFetch<AssetRead[]>("/api/v1/assets?limit=200");
+      setAssets(rows.filter((a) => a.asset_type === "image"));
+    } catch (err) {
+      if (!opts?.silent) {
+        setLoadError(
+          err instanceof ApiRequestError
+            ? err.message
+            : err instanceof Error
               ? err.message
-              : err instanceof Error
-                ? err.message
-                : "Failed to load photos",
-          );
-        }
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
+              : "Failed to load photos",
+        );
+      }
+    } finally {
+      if (!opts?.silent) setLoading(false);
+    }
   }, []);
 
-  if (loading) {
-    return (
-      <main className="mx-auto max-w-5xl px-4 py-8">
-        <p className="text-muted-foreground">Loading photos…</p>
-      </main>
-    );
-  }
-
-  if (error) {
-    return (
-      <main className="mx-auto max-w-5xl px-4 py-8">
-        <Card className="border-destructive/40">
-          <CardHeader>
-            <CardTitle>Could not load gallery</CardTitle>
-            <CardDescription>{error}</CardDescription>
-          </CardHeader>
-        </Card>
-      </main>
-    );
-  }
-
-  if (assets.length === 0) {
-    return (
-      <main className="mx-auto max-w-5xl px-4 py-8">
-        <h1 className="mb-2 text-2xl font-semibold tracking-tight">Photos</h1>
-        <p className="text-muted-foreground">
-          No images yet. Upload JPEG, PNG, WebP, or GIF via the API{" "}
-          <code className="rounded bg-muted px-1 py-0.5 text-xs">
-            POST /api/v1/assets
-          </code>{" "}
-          to see them here.
-        </p>
-      </main>
-    );
-  }
+  useEffect(() => {
+    void reloadAssets();
+  }, [reloadAssets]);
 
   return (
     <main className="mx-auto max-w-5xl px-4 py-8">
       <h1 className="mb-6 text-2xl font-semibold tracking-tight">Photos</h1>
-      <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
-        {assets.map((asset) => (
-          <li key={asset.id}>
-            <Card className="overflow-hidden py-0">
-              <div className="aspect-square bg-muted">
-                {asset.primary_version ? (
-                  <img
-                    src={assetFileUrl(asset.id)}
+
+      <GalleryUploadForm onUploaded={() => void reloadAssets({ silent: true })} />
+
+      {loading ? (
+        <p className="text-muted-foreground">Loading photos…</p>
+      ) : loadError ? (
+        <Card className="mb-8 border-destructive/40">
+          <CardHeader>
+            <CardTitle>Could not load gallery</CardTitle>
+            <CardDescription>{loadError}</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <p className="text-sm text-muted-foreground">
+              You can still try uploading above; refresh or sign in again if the
+              error persists.
+            </p>
+          </CardContent>
+        </Card>
+      ) : null}
+
+      {!loading && !loadError && assets.length === 0 ? (
+        <p className="text-muted-foreground">
+          No images yet. Upload one using the form above (JPEG, PNG, WebP, GIF,
+          or HEIC).
+        </p>
+      ) : null}
+
+      {!loading && !loadError && assets.length > 0 ? (
+        <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
+          {assets.map((asset) => (
+            <li key={asset.id}>
+              <Card className="overflow-hidden py-0">
+                <div className="aspect-square bg-muted">
+                  <AssetImageThumb
+                    assetId={asset.id}
                     alt={asset.title ?? "Photo"}
-                    className="h-full w-full object-cover"
-                    loading="lazy"
                   />
-                ) : (
-                  <div className="flex h-full items-center justify-center p-2 text-center text-xs text-muted-foreground">
-                    No file
-                  </div>
-                )}
-              </div>
-              <CardContent className="p-2">
-                <p className="truncate text-xs font-medium">
-                  {asset.title ?? "Untitled"}
-                </p>
-              </CardContent>
-            </Card>
-          </li>
-        ))}
-      </ul>
+                </div>
+                <CardContent className="p-2">
+                  <p className="truncate text-xs font-medium">
+                    {asset.title ?? "Untitled"}
+                  </p>
+                </CardContent>
+              </Card>
+            </li>
+          ))}
+        </ul>
+      ) : null}
     </main>
   );
 }

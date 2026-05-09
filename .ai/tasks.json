@@ -163,12 +163,39 @@
       ]
     },
     {
+      "id": "T19",
+      "title": "Dashboard timeline: year selector plus twelve-month bar",
+      "description": "Home timeline UX: choose calendar year then pick exactly one month on a horizontal twelve-segment bar; filters dashboard photos/player by captured_at for that month (refines T17 strip).",
+      "priority": "Medium",
+      "depends_on": [
+        "T17"
+      ]
+    },
+    {
+      "id": "T20",
+      "title": "Dashboard timeline: years from captured_at data plus chevron month emoji strip",
+      "description": "Year tabs only for years present in asset captured_at; chevron-shaped month segments with localized month name and seasonal emoji; empty library falls back to current year with hint.",
+      "priority": "Medium",
+      "depends_on": [
+        "T19"
+      ]
+    },
+    {
       "id": "T18",
       "title": "Photos page: browsing and multipart upload",
       "description": "Photos route shows gallery plus upload form posting multipart to POST /api/v1/assets via authenticated BFF; refresh list on success; inline errors.",
       "priority": "Medium",
       "depends_on": [
         "T16",
+        "T10"
+      ]
+    },
+    {
+      "id": "T21",
+      "title": "Fix GET /api/v1/assets primary_version hydration",
+      "description": "Ensure list/detail/file routes populate primary_version from asset_versions via explicit queries so gallery thumbnails work.",
+      "priority": "Medium",
+      "depends_on": [
         "T10"
       ]
     }

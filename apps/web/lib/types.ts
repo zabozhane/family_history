@@ -53,8 +53,16 @@ export interface AssetRead {
   title: string | null;
   description: string | null;
   captured_at: string | null;
+  /** When the asset row was created (upload time); used for timeline when `captured_at` is absent. */
+  created_at: string;
   permission_scope: PermissionScope;
   primary_version: AssetVersionRead | null;
+}
+
+/** Mirrors `AssetUploadResponse` from apps/api `schemas/asset.py`. */
+export interface AssetUploadResponse {
+  asset: AssetRead;
+  version: AssetVersionRead;
 }
 
 export type TimelineEntryKind = "asset_added" | "event" | "activity";

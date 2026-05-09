@@ -1,4 +1,4 @@
-import type { ApiError } from "./types";
+import type { ApiError, AssetUploadResponse } from "./types";
 
 const PROXY_PREFIX = "/api/fms";
 
@@ -29,6 +29,43 @@ async function parseError(res: Response): Promise<ApiError | null> {
   }
 }
 
+function formatApiDetail(body: ApiError | null, status: number): string {
+  const d = body?.detail;
+  if (typeof d === "string") return d;
+  if (Array.isArray(d)) {
+    const parts = d
+      .map((item) =>
+        typeof item === "object" && item !== null && "msg" in item
+          ? String((item as { msg: string }).msg)
+          : "",
+      )
+      .filter(Boolean);
+    if (parts.length > 0) return parts.join("; ");
+  }
+  return `HTTP ${status}`;
+}
+
+/** Multipart upload to `POST /api/v1/assets` via BFF (`credentials: include`). */
+export async function apiUploadAsset(
+  formData: FormData,
+): Promise<AssetUploadResponse> {
+  const url = toProxiedApiPath("/api/v1/assets");
+  const res = await fetch(url, {
+    method: "POST",
+    body: formData,
+    credentials: "include",
+  });
+  if (!res.ok) {
+    const body = await parseError(res);
+    throw new ApiRequestError(
+      res.status,
+      formatApiDetail(body, res.status),
+      body,
+    );
+  }
+  return (await res.json()) as AssetUploadResponse;
+}
+
 export async function apiFetch<T>(
   path: string,
   init: RequestInit = {},
@@ -45,9 +82,11 @@ export async function apiFetch<T>(
   const res = await fetch(url, { ...init, headers, credentials: "include" });
   if (!res.ok) {
     const body = await parseError(res);
-    const detail =
-      typeof body?.detail === "string" ? body.detail : `HTTP ${res.status}`;
-    throw new ApiRequestError(res.status, detail, body);
+    throw new ApiRequestError(
+      res.status,
+      formatApiDetail(body, res.status),
+      body,
+    );
   }
   if (res.status === 204) return undefined as unknown as T;
   return (await res.json()) as T;
