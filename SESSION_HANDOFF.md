@@ -1,46 +1,30 @@
 # Session Handoff
 
 ## Completed In This Session
+**T20 — Dashboard timeline: data-driven years + chevron months (name + emoji).**
 
-### T16 — Dashboard shell (layout + navigation)
+- **Years**: only calendar years that occur on any asset **`captured_at`** in the **`limit=200`** fetch (newest first). If none → single **current year** + amber helper text.
+- **Month strip**: **chevron** segments (`clip-path` + pixel overlap), **full month name** via **`Intl`**, **seasonal emoji** per month (❄️ / 🌱 / ☀️ / 🍂 …), **season-tinted gradients**.
+- Filtering for photos/player unchanged (**local** month vs **`captured_at`**).
 
-- **`DashboardShell`** (`components/dashboard-shell.tsx`): sidebar **Family Media**, nav **Timeline** (`/#dashboard-timeline`), **Photos** (`/gallery`), **Music** (`/music`), **Profile** (`/me`), footer **Log out** via **`SignOutButton`** with **`label`**.
-- **Route group** **`app/(dashboard)/`**: **`layout.tsx`** wraps **`/gallery`**, **`/music`**, **`/timeline`**, **`/me`** (URLs unchanged). **`SiteNav`** removed from root layout; **`site-nav.tsx`** deleted.
-- **Authenticated `/`**: **`DashboardShell`** + placeholder **`#dashboard-timeline`** + links to full **`/timeline`** / sections until **T17**. Guests: marketing-only **Sign in** / **Create account**.
-- **Login / register** success → **`window.location.assign("/")`** (full load so **`/`** sees new cookies; avoids stale RSC after **`router.push`**).
-
-### Auth fixes (post-T16, Docker / localhost)
-
-- **`/`** **`dynamic = "force-dynamic"`** — home always uses fresh **`cookies()`**.
-- **HttpOnly cookies**: **`Secure`** flag only when the browser request is actually HTTPS (**`isHttpsRequest(req)`** from **`x-forwarded-proto`** + URL protocol). Fixes **`NODE_ENV=production`** + **`http://localhost:3000`** where **`Secure`** cookies were ignored by the browser.
-- **`applyAuthCookies` / `clearAuthCookies`** take **`NextRequest`**; wired from session routes + **`backend-proxy`** on token refresh / failed refresh.
+Convention: new shipped behavior documented under **`TASKS.md`** **`T*`** + this file (**`CURSOR_EXECUTION_MODE.md`** § artifact policy).
 
 ## Test Summary
-
 - `npm run typecheck` && `npm run build` in **`apps/web`** — OK.
-- **`docker compose build web && docker compose up -d web`** — login → dashboard with sidebar.
 
 ## How To Test (repeatable)
-
-- Web: `cd apps/web && npm run typecheck && npm run build`
-- Cookie smoke (Compose): open **`http://localhost:3000/login`**, sign in → **`/`** must show sidebar (not marketing-only screen).
-- After route moves: if **`tsc`** fails on missing **`app/gallery/page`**, remove **`apps/web/.next`** and rebuild.
+- **`/`** with uploads only in e.g. **2024** → year row shows **2024** only (plus others only if dated assets exist).
+- Resize narrow viewport → month chevrons scroll horizontally (**`min-w-[640px]`** strip).
 
 ## Current Stack State
-
-**T1–T16** done per **`TASKS.md`**. Next: **T17** (home time-range strip + filtered photos + bottom player), then **T18** (photos upload UI).
+**T1–T17**, **T19**, **T20** done (**T19** note points here for final UX). **T18** pending — Photos multipart upload.
 
 ## Known Issues / Risks
-
-- Stale **`apps/web/.next`** after moving routes can confuse **`tsc`** until cache cleared.
-- **`/`** is not middleware-protected; shell appears whenever **`fms_access`** exists (even if expired).
-- Behind HTTPS terminator: ensure **`X-Forwarded-Proto: https`** so refreshed cookies stay **`Secure`** when appropriate.
+- Years inferred only from **first 200** assets returned by API (same ceiling as dashboard load).
+- Undated assets do not create year tabs.
 
 ## Next Recommended Task
-
-**T17 — Home dashboard: time-range strip, filtered photos, bottom player.**
+**T18 — Photos page: browsing + upload new media.**
 
 ## Notes For Next Session
-
-- Read **`CURSOR_EXECUTION_MODE.md`** + **`.ai/*.json`** first.
-- Implement real **`#dashboard-timeline`** region + photo strip + player on **`/`** per **T17**.
+- Optional: API **`captured_after/before`** or pagination so year discovery scales beyond 200 rows.

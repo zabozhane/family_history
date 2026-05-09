@@ -451,9 +451,9 @@ Tested:
 - `npm run typecheck` && `npm run build` in `apps/web` — OK (after clearing stale `.next` cache).
 - Manual Docker: **`docker compose build web && docker compose up -d web`** — login shows dashboard **`/`** with sidebar.
 
-## T17 — Home dashboard: time-range strip, filtered photos, bottom player  [TODO]
+## T17 — Home dashboard: time-range strip, filtered photos, bottom player  [DONE]
 Priority: High
-Status: Pending
+Status: Done
 
 On the **main dashboard** (post-login home), stack three vertical zones: (1) **interactive time axis** (e.g. month buckets or draggable range) that sets a **`from`/`to`** filter; (2) **photo grid** for **image** assets whose `captured_at` (or agreed field) falls in that interval, using existing APIs/BFF patterns (`GET /api/v1/assets` with client-side filter or query params if/when API supports them); (3) **compact music player** for **audio** assets: play/pause, prev/next track, wired to streamed files via `/api/fms/v1/assets/{id}/file`. Reuse types/helpers from gallery/music/timeline where possible.
 
@@ -462,13 +462,47 @@ Depends on:
 - T13
 - T14
 
-Completion criteria (DoD):
-- Changing the selected range updates the visible photo set without full page reload (client state + fetch).
-- Player controls cycle through the user's audio list (order documented in UI code).
-- Empty states handled (no photos / no audio in range).
+Completion note:
+- **`DashboardHome`** (`components/dashboard-home.tsx`): client component on **`/`** inside **`DashboardShell`**. Loads **`GET /api/v1/assets?limit=200`** once; filters **images** / **audio** by **`captured_at`** falling in the **selected calendar month (local timezone)**.
+- **Timeline strip**: superseded by **T19** — year row + **12-month bar** (was: **last 36** month pills).
+- **Photos**: responsive grid + **`assetFileUrl`** thumbnails; empty copy explains **`captured_at`** requirement + link **`/gallery`**.
+- **Player**: footer bar with **Previous / Play / Next**, **`audio`** with **`assetFileUrl`**, **`onEnded`** advances (wrap); **playlist order** labeled as **`captured_at` descending**; empty state + link **`/music`**.
+- **`DashboardShell`** main column **`overflow-hidden` / `min-h-0`** so mid pane scrolls under fixed-ish footer player.
 
 Tested:
-- (pending) `npm run typecheck` && `npm run build` in `apps/web`; manual smoke in Docker stack.
+- `npm run typecheck` && `npm run build` in `apps/web` — OK.
+
+## T19 — Dashboard timeline: year row + month bar (single month)  [DONE]
+Priority: Medium
+Status: Done
+
+Replace the **rolling month pills** on the authenticated home timeline with a **year selector** (top row) and a **continuous horizontal month bar** for the selected year: **12 segments**, one **calendar month** each (local timezone). Selecting a segment filters photos and the dashboard player the same way as **T17** ( **`captured_at`** within that month). Multi-month ranges deferred.
+
+Depends on:
+- T17
+
+Completion note:
+- **`DashboardHome`**: **`selectedYear`** + **`selectedMonthIndex`**; month selection UX refined in **T20** (years from data + chevron months).
+- Sidebar **Timeline** anchor **`#dashboard-timeline`** unchanged.
+
+Tested:
+- `npm run typecheck` && `npm run build` in `apps/web` — OK.
+
+## T20 — Dashboard timeline: data-driven years + chevron months with emoji  [DONE]
+Priority: Medium
+Status: Done
+
+Limit the **year** row to calendar years that appear on at least one asset’s **`captured_at`** (from the dashboard asset fetch). If nothing has a capture date, show **only the current year** and helper copy. Replace the flat **12-month row** with **interlocking chevron** segments (breadcrumb-style **`clip-path`**): each segment shows **localized full month name** + **seasonal emoji** (winter snow / spring sprout / summer sun / autumn leaves); gradients follow season. Filtering behavior unchanged (**T17**/**T19**).
+
+Depends on:
+- T19
+
+Completion note:
+- **`yearsFromAssets`**: unique years from **`parseCapturedAt`** over all returned assets; **`yearOptions`** defaults **`[currentYear]`** when empty.
+- **Chevron strip**: **`CHEVRON_NOTCH_PX`** overlap; **`monthEmoji`** map per month index; **`Intl`** **`month: "long"`**; horizontal scroll **`min-w-[640px]`** on narrow viewports.
+
+Tested:
+- `npm run typecheck` && `npm run build` in `apps/web` — OK.
 
 ## T18 — Photos page: browsing + upload new media  [TODO]
 Priority: Medium

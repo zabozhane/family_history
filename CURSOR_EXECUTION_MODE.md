@@ -48,6 +48,7 @@ A task is not complete until these artifacts are updated:
    - Test result summary.
    - Known issues/risks.
    - Next task recommendation.
+3. **Incremental features** (new behavior or UX not covered by an open task): append the next **`T*`** block in **`TASKS.md`** (`[DONE]` when shipped, with completion note + tested) and update **`SESSION_HANDOFF.md`** in the same iteration unless the user explicitly defers documentation.
 
 ## Quality Gate Per Task
 A task is complete only if:
