@@ -1,0 +1,36 @@
+================================================================================
+Family Media System — текстовое описание архитектуры и контейнеров
+================================================================================
+
+НАЗНАЧЕНИЕ
+---------
+Приватная семейная медиатека: фото, видео, аудио, таймлайн, JWT, хранение в S3-
+совместимом MinIO, PostgreSQL для метаданных и пользователей.
+
+СТРУКТУРА РЕПОЗИТОРИЯ
+---------------------
+apps/api    — FastAPI, REST /api/v1, JWT, PostgreSQL, MinIO, Redis (Dramatiq broker).
+apps/web    — Next.js (App Router): UI, BFF-прокси /api/fms/..., cookies.
+apps/worker — фоновые задачи (Dramatiq): метаданные медиа (развитие по TASKS).
+
+DOCKER COMPOSE (family-media), сеть fms
+----------------------------------------
+postgres      — PostgreSQL 16, том postgres_data, порт 5432.
+redis         — брокер очередей / кэш, том redis_data, порт 6379.
+minio         — объектное хранилище (S3 API), порты 9000 API / 9001 консоль.
+minio-init    — одноразовое создание bucket (ждёт api после успешного завершения).
+api           — FastAPI :8000, depends_on postgres, redis, minio, minio-init.
+worker        — воркер Dramatiq, postgres + redis + minio.
+web           — Next.js :3000, API_INTERNAL_BASE_URL=http://api:8000.
+
+БРАУЗЕР → API
+-------------
+Клиент часто бьёт в Next.js на /api/fms/v1/... — серверный proxy на контейнер api
+(единый origin, передача cookie с токенами).
+
+ЗАПУСК
+------
+docker compose build && docker compose up -d
+Переменные — из .env (БД, MinIO, JWT secret, bucket).
+
+Подробнее: ARCHITECTURE.md, docker-compose.yml.

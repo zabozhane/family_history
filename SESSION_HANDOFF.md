@@ -1,39 +1,44 @@
 # Session Handoff
 
 ## Completed In This Session
-**Music player persistence, dashboard scroll model, scrubber reliability, compact track rows.**
+**Gallery UX + Timeline dashboard + music queue behaviour.**
 
-### Web — playback shell
-- **`MusicPlayerProvider`** wraps the app in **`app/layout.tsx`** (single `<audio>`); playback continues when navigating e.g. **`/music` → `/`** (Timeline/home), no duplicate providers under **`(dashboard)/layout`** or logged-in **`page.tsx`**.
-- **`music-player-context.tsx`**: **`MusicPlayerDock`** **`fixed`** at bottom of main column (**`left-[220px]`**); **`<audio>`** rendered **before** **`{children}`** so refs/listeners attach cleanly; bar receives **`durationMsFallback`** from **`primary_version.duration_ms`** when **`HTMLAudioElement.duration`** is unknown early.
+### Gallery (`/gallery`)
+- **`gallery-upload-form.tsx`**: компактная панель как у музыки (без большой Card), убран выбор **Private** — всегда **`permission_scope: private`** в FormData.
+- **`gallery-lightbox.tsx`** (новый): полноэкранный просмотр фото; фон **`backdrop-blur`** + затемнение; для **video** — **`<video controls>`**, для изображений — **`<img>`**; стрелки, свайп, Escape; опционально удаление через **`onRequestDelete`**.
+- **`gallery/page.tsx`**: плотная сетка превью как на таймлайне; клик открывает лайтбокс; удаление фото с модалкой; корзина на превью.
 
-### Web — player UI & scrubber
-- **`music-player-bar.tsx`**: compact single-row layout; **`loadeddata` / `canplay` / `progress` / `playing`** + fallback duration fix **`0:00`** total and empty progress fill.
+### Timeline / главная (`dashboard-home.tsx`)
+- Узкая полоска месяцев (меньший notch, ниже высота, короткие подписи через **Intl**).
+- Строка **«Месяц Год»** + фильтры **Photo / Video / Music / All**; для месяца собираются **image / video / audio** по дате таймлайна.
+- Сетка фото/видео как на Photos (много колонок, мелкие ячейки).
+- Убран нижний встроенный **music player** на главной.
+- Вкладка **Music**: список треков месяца с Play/Pause через глобальный плеер; очередь **не** пересобирается при смене месяца автоматически — только по клику (**`loadQueueAndPlay`**).
+- **`GalleryLightbox`** на таймлайне для превью (те же **`visualForFilter`**).
 
-### Web — dashboard shell
-- **`dashboard-shell.tsx`**: **`h-dvh max-h-dvh overflow-hidden`** so the **document** does not scroll; only the main pane scrolls; sidebar nav **`overflow-y-auto`** when needed; bottom padding when music dock is visible.
+### Плеер (`music-player-context.tsx`)
+- **`loadQueueAndPlay(tracks, index)`** — замена очереди и старт трека одним действием (таймлайн Music).
 
-### Web — music list
-- **`app/(dashboard)/music/page.tsx`**: denser rows (**`px-3 py-2`**, **`text-sm` / `text-xs`**, **`h-8`** buttons, **`space-y-1.5`**).
+### Прочее
+- **`textarch.txt`** в корне — краткое текстовое описание Docker-сервисов и потоков данных.
 
-Convention: **`TASKS.md`** **T22** completion note (follow-up bullets) + this file.
+Convention: **`TASKS.md`** T22 follow-up bullets + this file.
 
 ## Test Summary
-- **`npm run typecheck`** (**`apps/web`**) — OK.
+- **`npm run typecheck`** (**`apps/web`**) — run before commit.
 
 ## How To Test (repeatable)
-- Play a track on **`/music`**, navigate to **Timeline/home** → audio keeps playing; dock stays visible at bottom of main column without scrolling the page to find it.
-- Confirm scrubber shows total duration (not **`0:00`**) and green progress advances.
-- **`/music`**: track rows look noticeably shorter than before.
+- **`/gallery`**: компактная загрузка, лайтбокс, удаление, без дропдауна видимости.
+- **`/`** (Timeline): фильтры, месяцы, лайтбокс по клику на превью; Music — список треков, воспроизведение не обрывается при смене месяца без нового Play.
 
 ## Current Stack State
-Through **T22** in **`TASKS.md`** (including follow-up UX).
+**T22** done + web UX iterations (gallery + home timeline).
 
 ## Known Issues / Risks
-- If **`duration_ms`** is **null** in DB and browser never exposes duration, scrubber may still lack total length until metadata loads.
+- При пустом месяце на вкладке Music очередь плеера может не совпадать со списком на экране до следующего клика Play — ожидаемо.
 
 ## Next Recommended Task
-Worker/metadata backfill for **`duration_ms`**, timeline polish, or gallery parity.
+Worker **`duration_ms`**, отдельная страница `/timeline`, доработки галереи.
 
 ## Notes For Next Session
 - None.

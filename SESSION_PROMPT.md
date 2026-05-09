@@ -12,5 +12,6 @@ Focus for this session:
 7. Update `.ai/*.json` state only through CLI workflows.
 
 Suggested first tasks:
-- Read **`SESSION_HANDOFF.md`** for the latest shipped web UX (music player shell, dashboard **`h-dvh`**, compact **`/music`** rows).
-- Pick the next open item from **`TASKS.md`** (worker **`duration_ms`**, timeline, gallery, etc.).
+- Read **`SESSION_HANDOFF.md`** for the latest shipped web UX (gallery lightbox + compact upload, timeline filters + lightbox, **`loadQueueAndPlay`**, no auto queue reset on month change).
+- **`textarch.txt`** — краткое описание Docker-сервисов и потоков (если нужен онбординг).
+- Pick the next open item from **`TASKS.md`** (worker **`duration_ms`**, full **`/timeline`**, etc.).

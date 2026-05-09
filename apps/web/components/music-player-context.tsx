@@ -33,6 +33,8 @@ export function sortAudioTracks(rows: AssetRead[]): AssetRead[] {
 type MusicPlayerContextValue = {
   queue: AssetRead[];
   replaceQueue: (tracks: AssetRead[]) => void;
+  /** Sets queue and starts playback at index (e.g. timeline month list); does not run on navigation by itself. */
+  loadQueueAndPlay: (tracks: AssetRead[], index: number) => void;
   currentIndex: number;
   currentTrack: AssetRead | null;
   playerVisible: boolean;
@@ -95,6 +97,16 @@ export function MusicPlayerProvider({ children }: { children: ReactNode }) {
       }
       return Math.min(prev, tracks.length - 1);
     });
+  }, []);
+
+  const loadQueueAndPlay = useCallback((tracks: AssetRead[], index: number) => {
+    if (tracks.length === 0) return;
+    pendingPlayRef.current = true;
+    setPlayerVisible(true);
+    setQueue(tracks);
+    const i = Math.min(Math.max(0, index), tracks.length - 1);
+    setCurrentIndex(i);
+    setPlayGeneration((g) => g + 1);
   }, []);
 
   useEffect(() => {
@@ -181,6 +193,7 @@ export function MusicPlayerProvider({ children }: { children: ReactNode }) {
     () => ({
       queue,
       replaceQueue,
+      loadQueueAndPlay,
       currentIndex,
       currentTrack,
       playerVisible,
@@ -198,6 +211,7 @@ export function MusicPlayerProvider({ children }: { children: ReactNode }) {
     [
       queue,
       replaceQueue,
+      loadQueueAndPlay,
       currentIndex,
       currentTrack,
       playerVisible,
