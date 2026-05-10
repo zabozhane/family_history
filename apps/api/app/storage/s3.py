@@ -36,10 +36,33 @@ async def put_object(key: str, body: bytes, content_type: str) -> None:
         )
 
 
-async def iter_object_chunks(key: str, chunk_size: int = 65536) -> AsyncIterator[bytes]:
-    """Stream object bytes from the configured bucket (raises ClientError on failure)."""
+async def head_object_content_length(key: str) -> int:
+    """Return object size in bytes (raises ClientError if missing)."""
     async with _session.client("s3", **_client_kwargs()) as client:
-        response = await client.get_object(Bucket=settings.S3_BUCKET, Key=key)
+        response = await client.head_object(Bucket=settings.S3_BUCKET, Key=key)
+        return int(response["ContentLength"])
+
+
+async def iter_object_chunks(
+    key: str,
+    *,
+    byte_range: tuple[int, int] | None = None,
+    chunk_size: int = 65536,
+) -> AsyncIterator[bytes]:
+    """Stream object bytes from the configured bucket (raises ClientError on failure).
+
+    When ``byte_range`` is ``(start, end)`` inclusive, uses S3 ranged GET so browsers
+    can seek video via HTTP Range requests.
+    """
+    async with _session.client("s3", **_client_kwargs()) as client:
+        kwargs: dict[str, object] = {
+            "Bucket": settings.S3_BUCKET,
+            "Key": key,
+        }
+        if byte_range is not None:
+            start, end = byte_range
+            kwargs["Range"] = f"bytes={start}-{end}"
+        response = await client.get_object(**kwargs)
         body = response["Body"]
         while True:
             chunk = await body.read(chunk_size)

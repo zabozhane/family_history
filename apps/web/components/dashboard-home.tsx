@@ -31,9 +31,6 @@ function formatDuration(ms: number | null | undefined): string | null {
   return `${m}:${s.toString().padStart(2, "0")}`;
 }
 
-/** Horizontal overlap between chevron segments (px) — smaller = sleeker strip */
-const CHEVRON_NOTCH_PX = 8;
-
 /** Local calendar bounds for [year, monthIndex]. */
 function localMonthRange(year: number, monthIndex: number): { start: Date; end: Date } {
   const start = new Date(year, monthIndex, 1, 0, 0, 0, 0);
@@ -69,43 +66,74 @@ function yearsFromAssets(assets: AssetRead[]): number[] {
   return Array.from(ys).sort((a, b) => b - a);
 }
 
-function chevronClipPath(position: "first" | "mid" | "last"): string {
-  const n = CHEVRON_NOTCH_PX;
-  if (position === "first") {
-    return `polygon(0 0, calc(100% - ${n}px) 0, 100% 50%, calc(100% - ${n}px) 100%, 0 100%)`;
-  }
-  if (position === "last") {
-    return `polygon(${n}px 0, 100% 0, 100% 100%, ${n}px 100%, 0 50%)`;
-  }
-  return `polygon(${n}px 0, calc(100% - ${n}px) 0, 100% 50%, calc(100% - ${n}px) 100%, 0 100%, ${n}px 50%)`;
-}
-
-/** Seasonal vibe + emoji per calendar month (local month index 0 = January). */
-function monthEmoji(monthIndex: number): string {
-  const emojis = ["❄️", "❄️", "🌱", "🌷", "🌿", "☀️", "☀️", "🌻", "🍂", "🍂", "🍁", "❄️"];
-  return emojis[monthIndex] ?? "📅";
-}
-
-function monthChevronStyle(monthIndex: number, selected: boolean): string {
-  const winter = "bg-gradient-to-b from-sky-600 to-cyan-800";
-  const spring = "bg-gradient-to-b from-emerald-600 to-teal-700";
-  const summer = "bg-gradient-to-b from-amber-500 to-orange-600";
-  const autumn = "bg-gradient-to-b from-orange-700 to-red-900";
-  let season = winter;
-  if ([2, 3, 4].includes(monthIndex)) season = spring;
-  else if ([5, 6, 7].includes(monthIndex)) season = summer;
-  else if ([8, 9, 10].includes(monthIndex)) season = autumn;
-
-  return cn(
-    "text-white shadow-sm transition-[filter,transform] hover:brightness-110 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-0 focus-visible:outline-white/90",
-    season,
-    selected && "z-30 brightness-110 shadow-[inset_0_-3px_0_0_rgba(255,255,255,0.92)]",
-  );
-}
-
 const MONTH_INDEXES = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11] as const;
 
 type MediaFilter = "all" | "image" | "video" | "audio";
+
+function DashboardMusicList({
+  tracks,
+  onRowClick,
+  currentTrackId,
+  playing,
+  playerVisible,
+}: {
+  tracks: AssetRead[];
+  onRowClick: (index: number) => void;
+  currentTrackId: string | undefined;
+  playing: boolean;
+  playerVisible: boolean;
+}) {
+  if (tracks.length === 0) {
+    return (
+      <p className="text-sm text-muted-foreground">
+        No tracks this month.{" "}
+        <Link href="/music" className="font-medium text-primary underline">
+          Music library
+        </Link>
+      </p>
+    );
+  }
+  return (
+    <ul className="space-y-1.5">
+      {tracks.map((asset, index) => {
+        const duration = formatDuration(asset.primary_version?.duration_ms);
+        const isThisTrack = playerVisible && currentTrackId === asset.id;
+        return (
+          <li key={asset.id}>
+            <Card className="rounded-md shadow-none">
+              <CardHeader className="flex flex-row items-center gap-3 space-y-0 px-3 py-2">
+                <div className="min-w-0 flex-1">
+                  <CardTitle className="text-sm font-semibold leading-tight">
+                    {asset.title ?? "Untitled track"}
+                  </CardTitle>
+                  <CardDescription className="mt-0.5 line-clamp-1 text-xs leading-tight">
+                    {asset.description ?? (duration ? `Duration ${duration}` : "Audio")}
+                  </CardDescription>
+                </div>
+                <div className="flex shrink-0 items-center gap-0.5">
+                  <Button
+                    type="button"
+                    size="icon"
+                    variant={isThisTrack ? "default" : "secondary"}
+                    className="h-8 w-8 rounded-full"
+                    aria-label={isThisTrack && playing ? "Пауза" : "Воспроизвести"}
+                    onClick={() => onRowClick(index)}
+                  >
+                    {isThisTrack && playing ? (
+                      <Pause className="h-3.5 w-3.5" />
+                    ) : (
+                      <Play className="h-3.5 w-3.5 fill-current" />
+                    )}
+                  </Button>
+                </div>
+              </CardHeader>
+            </Card>
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
 
 export function DashboardHome() {
   const [selectedYear, setSelectedYear] = useState(() => new Date().getFullYear());
@@ -253,13 +281,15 @@ export function DashboardHome() {
   const visualForFilter = useMemo(() => {
     if (mediaFilter === "image") return imagesInRange;
     if (mediaFilter === "video") return videosInRange;
-    if (mediaFilter === "all") {
-      return assetsInMonth.filter(
-        (a) => a.asset_type === "image" || a.asset_type === "video",
-      );
-    }
     return [];
-  }, [mediaFilter, imagesInRange, videosInRange, assetsInMonth]);
+  }, [mediaFilter, imagesInRange, videosInRange]);
+
+  /** Lightbox order matches UI: for All, photos then videos (same row-major expectation). */
+  const lightboxAssets = useMemo(() => {
+    if (mediaFilter === "audio") return [];
+    if (mediaFilter === "all") return [...imagesInRange, ...videosInRange];
+    return visualForFilter;
+  }, [mediaFilter, imagesInRange, videosInRange, visualForFilter]);
 
   useEffect(() => {
     if (lightboxIndex === null) return;
@@ -267,14 +297,14 @@ export function DashboardHome() {
       setLightboxIndex(null);
       return;
     }
-    if (visualForFilter.length === 0) {
+    if (lightboxAssets.length === 0) {
       setLightboxIndex(null);
       return;
     }
-    if (lightboxIndex >= visualForFilter.length) {
-      setLightboxIndex(visualForFilter.length - 1);
+    if (lightboxIndex >= lightboxAssets.length) {
+      setLightboxIndex(lightboxAssets.length - 1);
     }
-  }, [visualForFilter, lightboxIndex, mediaFilter]);
+  }, [lightboxAssets, lightboxIndex, mediaFilter]);
 
   if (loading) {
     return (
@@ -299,7 +329,10 @@ export function DashboardHome() {
 
   const hasTimelineYears = yearsWithData.length > 0;
 
-  const showGrid = mediaFilter !== "audio";
+  const monthHasNothing =
+    imagesInRange.length === 0 &&
+    videosInRange.length === 0 &&
+    audioInRange.length === 0;
 
   const FILTER_TABS: { id: MediaFilter; label: string }[] = [
     { id: "image", label: "Photo" },
@@ -319,7 +352,7 @@ export function DashboardHome() {
           <p className="mt-1 max-w-xl text-xs text-muted-foreground">
             Photos, videos, and tracks are grouped by capture date when set; otherwise by upload
             time. Years listed here have at least one image, video, or audio file in that year.
-            Pick a month on the strip (local calendar). Need events?{" "}
+            Pick a month (local calendar). Need events?{" "}
             <Link href="/timeline" className="font-medium text-primary underline">
               Full timeline
             </Link>
@@ -365,20 +398,15 @@ export function DashboardHome() {
             Select month for {selectedYear}
           </p>
           <div
-            className="overflow-x-auto overflow-y-visible pb-1 pt-0 [-ms-overflow-style:none] [scrollbar-width:thin] md:[scrollbar-width:none]"
+            className="rounded-lg border border-border bg-muted/40 p-1 shadow-sm"
             role="tablist"
             aria-labelledby="month-bar-label"
           >
-            <div className="flex min-w-[520px] items-stretch md:min-w-0">
+            <div className="grid grid-cols-6 gap-1 sm:grid-cols-12">
               {MONTH_INDEXES.map((mi) => {
                 const selected = mi === selectedMonthIndex;
                 const label = monthLabels[mi];
                 const shortLabel = monthShortFmt.format(new Date(selectedYear, mi, 1));
-                const emoji = monthEmoji(mi);
-                const position =
-                  mi === 0 ? "first" : mi === 11 ? "last" : "mid";
-                const overlap =
-                  mi === 0 ? 0 : -(CHEVRON_NOTCH_PX - 1);
 
                 return (
                   <button
@@ -386,27 +414,17 @@ export function DashboardHome() {
                     type="button"
                     role="tab"
                     aria-selected={selected}
-                    aria-label={`${label} ${emoji}`}
+                    aria-label={`${selectedYear} ${label}`}
                     title={`${selectedYear} ${label}`}
                     onClick={() => setSelectedMonthIndex(mi)}
-                    style={{
-                      clipPath: chevronClipPath(position),
-                      marginLeft: overlap,
-                      zIndex: selected ? 30 : mi + 1,
-                    }}
                     className={cn(
-                      "relative min-h-[2rem] min-w-0 flex-1 px-1 py-1 text-center sm:min-h-[2.25rem]",
-                      monthChevronStyle(mi, selected),
+                      "min-h-[2rem] rounded-md px-1 py-1.5 text-center text-[10px] font-semibold uppercase tracking-wide transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background sm:min-h-0 sm:py-2 sm:text-[11px]",
+                      selected
+                        ? "bg-primary text-primary-foreground shadow-sm"
+                        : "text-muted-foreground hover:bg-muted/80 hover:text-foreground",
                     )}
                   >
-                    <span className="pointer-events-none flex flex-row items-center justify-center gap-0.5 leading-none sm:flex-col sm:gap-0.5">
-                      <span className="max-w-[95%] truncate text-[9px] font-semibold opacity-95 sm:text-[10px]">
-                        {shortLabel}
-                      </span>
-                      <span className="select-none text-xs sm:text-sm" aria-hidden>
-                        {emoji}
-                      </span>
-                    </span>
+                    <span className="pointer-events-none block truncate">{shortLabel}</span>
                   </button>
                 );
               })}
@@ -449,64 +467,22 @@ export function DashboardHome() {
         </div>
 
         <GalleryLightbox
-          assets={mediaFilter === "audio" ? [] : visualForFilter}
+          assets={lightboxAssets}
           index={lightboxIndex}
           onClose={() => setLightboxIndex(null)}
           onIndexChange={setLightboxIndex}
         />
 
         {mediaFilter === "audio" ? (
-          audioInRange.length === 0 ? (
-            <p className="text-sm text-muted-foreground">
-              No audio in this month.{" "}
-              <Link href="/music" className="font-medium text-primary underline">
-                Music library
-              </Link>
-            </p>
-          ) : (
-            <>
-              <ul className="space-y-1.5">
-                {audioInRange.map((asset, index) => {
-                  const duration = formatDuration(asset.primary_version?.duration_ms);
-                  const isThisTrack =
-                    playerVisible && currentTrack?.id === asset.id;
-                  return (
-                    <li key={asset.id}>
-                      <Card className="rounded-md shadow-none">
-                        <CardHeader className="flex flex-row items-center gap-3 space-y-0 px-3 py-2">
-                          <div className="min-w-0 flex-1">
-                            <CardTitle className="text-sm font-semibold leading-tight">
-                              {asset.title ?? "Untitled track"}
-                            </CardTitle>
-                            <CardDescription className="mt-0.5 line-clamp-1 text-xs leading-tight">
-                              {asset.description ??
-                                (duration ? `Duration ${duration}` : "Audio")}
-                            </CardDescription>
-                          </div>
-                          <div className="flex shrink-0 items-center gap-0.5">
-                            <Button
-                              type="button"
-                              size="icon"
-                              variant={isThisTrack ? "default" : "secondary"}
-                              className="h-8 w-8 rounded-full"
-                              aria-label={
-                                isThisTrack && playing ? "Пауза" : "Воспроизвести"
-                              }
-                              onClick={() => onTimelineMusicRowClick(index)}
-                            >
-                              {isThisTrack && playing ? (
-                                <Pause className="h-3.5 w-3.5" />
-                              ) : (
-                                <Play className="h-3.5 w-3.5 fill-current" />
-                              )}
-                            </Button>
-                          </div>
-                        </CardHeader>
-                      </Card>
-                    </li>
-                  );
-                })}
-              </ul>
+          <>
+            <DashboardMusicList
+              tracks={audioInRange}
+              onRowClick={onTimelineMusicRowClick}
+              currentTrackId={currentTrack?.id}
+              playing={playing}
+              playerVisible={playerVisible}
+            />
+            {audioInRange.length > 0 ? (
               <p className="mt-3 text-xs text-muted-foreground">
                 Playback uses the same bottom player as{" "}
                 <Link href="/music" className="font-medium text-primary underline">
@@ -514,70 +490,180 @@ export function DashboardHome() {
                 </Link>
                 .
               </p>
+            ) : null}
+          </>
+        ) : null}
+
+        {mediaFilter === "all" ? (
+          monthHasNothing ? (
+            <p className="text-sm text-muted-foreground">
+              Nothing in this month (photos, videos, or tracks).{" "}
+              <Link href="/gallery" className="font-medium text-primary underline">
+                Gallery
+              </Link>
+              {" · "}
+              <Link href="/video" className="font-medium text-primary underline">
+                Videos
+              </Link>
+              {" · "}
+              <Link href="/music" className="font-medium text-primary underline">
+                Music
+              </Link>
+            </p>
+          ) : (
+            <>
+              <div className="flex flex-col gap-6 lg:flex-row lg:items-stretch lg:gap-8">
+              <div className="flex min-w-0 flex-1 flex-col gap-8">
+                <div>
+                  <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                    Photo
+                  </h4>
+                  {imagesInRange.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">
+                      No photos in this month.{" "}
+                      <Link href="/gallery" className="font-medium text-primary underline">
+                        Gallery
+                      </Link>
+                    </p>
+                  ) : (
+                    <ul className="grid grid-cols-4 gap-1.5 sm:grid-cols-5 md:grid-cols-6 lg:grid-cols-7 xl:grid-cols-8">
+                      {imagesInRange.map((asset, i) => (
+                        <li key={asset.id}>
+                          <button
+                            type="button"
+                            className="group w-full overflow-hidden rounded-md border border-border bg-card text-left shadow-sm outline-none ring-offset-background transition hover:border-primary/40 focus-visible:ring-2 focus-visible:ring-ring"
+                            onClick={() => setLightboxIndex(i)}
+                          >
+                            <div className="aspect-square bg-muted">
+                              <AssetImageThumb
+                                assetId={asset.id}
+                                alt={asset.title ?? "Photo"}
+                              />
+                            </div>
+                            <p className="truncate px-1 py-1 text-[10px] font-medium leading-tight text-muted-foreground group-hover:text-foreground">
+                              {asset.title ?? "Untitled"}
+                            </p>
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+                <div>
+                  <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                    Video
+                  </h4>
+                  {videosInRange.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">
+                      No videos in this month.{" "}
+                      <Link href="/video" className="font-medium text-primary underline">
+                        Videos
+                      </Link>
+                    </p>
+                  ) : (
+                    <ul className="grid grid-cols-4 gap-1.5 sm:grid-cols-5 md:grid-cols-6 lg:grid-cols-7 xl:grid-cols-8">
+                      {videosInRange.map((asset, j) => (
+                        <li key={asset.id}>
+                          <button
+                            type="button"
+                            className="group w-full overflow-hidden rounded-md border border-border bg-card text-left shadow-sm outline-none ring-offset-background transition hover:border-primary/40 focus-visible:ring-2 focus-visible:ring-ring"
+                            onClick={() =>
+                              setLightboxIndex(imagesInRange.length + j)
+                            }
+                          >
+                            <div className="aspect-square bg-muted">
+                              <AssetVideoThumb
+                                assetId={asset.id}
+                                alt={asset.title ?? "Video"}
+                              />
+                            </div>
+                            <p className="truncate px-1 py-1 text-[10px] font-medium leading-tight text-muted-foreground group-hover:text-foreground">
+                              {asset.title ?? "Untitled"}
+                            </p>
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              </div>
+              <aside className="flex min-h-0 shrink-0 flex-col gap-2 lg:w-[min(280px,30vw)] lg:border-l lg:border-border lg:pl-6">
+                <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  Music
+                </h4>
+                <div className="min-h-0 lg:max-h-[min(calc(100dvh-12rem),56rem)] lg:overflow-y-auto lg:pr-1">
+                  <DashboardMusicList
+                    tracks={audioInRange}
+                    onRowClick={onTimelineMusicRowClick}
+                    currentTrackId={currentTrack?.id}
+                    playing={playing}
+                    playerVisible={playerVisible}
+                  />
+                </div>
+              </aside>
+              </div>
+              {audioInRange.length > 0 ? (
+                <p className="mt-4 text-xs text-muted-foreground">
+                  Playback uses the same bottom player as{" "}
+                  <Link href="/music" className="font-medium text-primary underline">
+                    Music
+                  </Link>
+                  .
+                </p>
+              ) : null}
             </>
           )
         ) : null}
 
-        {showGrid && visualForFilter.length === 0 ? (
-          <p className="text-sm text-muted-foreground">
-            {mediaFilter === "image"
-              ? "No photos in this month."
-              : mediaFilter === "video"
-                ? "No videos in this month."
-                : mediaFilter === "all"
-                  ? "No photos or videos in this month (by capture date, or upload date if none)."
-                  : null}{" "}
-            {mediaFilter === "video" ? (
-              <Link href="/video" className="font-medium text-primary underline">
-                Videos
-              </Link>
-            ) : mediaFilter === "image" ? (
-              <Link href="/gallery" className="font-medium text-primary underline">
-                Gallery
-              </Link>
-            ) : (
-              <>
-                <Link href="/gallery" className="font-medium text-primary underline">
-                  Gallery
-                </Link>
-                {" or "}
-                <Link href="/video" className="font-medium text-primary underline">
-                  Videos
-                </Link>
-              </>
-            )}
-          </p>
-        ) : null}
-
-        {showGrid && visualForFilter.length > 0 ? (
-          <ul className="grid grid-cols-4 gap-1.5 sm:grid-cols-5 md:grid-cols-7 lg:grid-cols-9 xl:grid-cols-10">
-            {visualForFilter.map((asset, i) => (
-              <li key={asset.id}>
-                <button
-                  type="button"
-                  className="group w-full overflow-hidden rounded-md border border-border bg-card text-left shadow-sm outline-none ring-offset-background transition hover:border-primary/40 focus-visible:ring-2 focus-visible:ring-ring"
-                  onClick={() => setLightboxIndex(i)}
-                >
-                  <div className="aspect-square bg-muted">
-                    {asset.asset_type === "image" ? (
-                      <AssetImageThumb
-                        assetId={asset.id}
-                        alt={asset.title ?? "Photo"}
-                      />
-                    ) : (
-                      <AssetVideoThumb
-                        assetId={asset.id}
-                        alt={asset.title ?? "Video"}
-                      />
-                    )}
-                  </div>
-                  <p className="truncate px-1 py-1 text-[10px] font-medium leading-tight text-muted-foreground group-hover:text-foreground">
-                    {asset.title ?? "Untitled"}
-                  </p>
-                </button>
-              </li>
-            ))}
-          </ul>
+        {mediaFilter === "image" || mediaFilter === "video" ? (
+          <>
+            {visualForFilter.length === 0 ? (
+              <p className="text-sm text-muted-foreground">
+                {mediaFilter === "image"
+                  ? "No photos in this month."
+                  : "No videos in this month."}{" "}
+                {mediaFilter === "video" ? (
+                  <Link href="/video" className="font-medium text-primary underline">
+                    Videos
+                  </Link>
+                ) : (
+                  <Link href="/gallery" className="font-medium text-primary underline">
+                    Gallery
+                  </Link>
+                )}
+              </p>
+            ) : null}
+            {visualForFilter.length > 0 ? (
+              <ul className="grid grid-cols-4 gap-1.5 sm:grid-cols-5 md:grid-cols-7 lg:grid-cols-9 xl:grid-cols-10">
+                {visualForFilter.map((asset, i) => (
+                  <li key={asset.id}>
+                    <button
+                      type="button"
+                      className="group w-full overflow-hidden rounded-md border border-border bg-card text-left shadow-sm outline-none ring-offset-background transition hover:border-primary/40 focus-visible:ring-2 focus-visible:ring-ring"
+                      onClick={() => setLightboxIndex(i)}
+                    >
+                      <div className="aspect-square bg-muted">
+                        {asset.asset_type === "image" ? (
+                          <AssetImageThumb
+                            assetId={asset.id}
+                            alt={asset.title ?? "Photo"}
+                          />
+                        ) : (
+                          <AssetVideoThumb
+                            assetId={asset.id}
+                            alt={asset.title ?? "Video"}
+                          />
+                        )}
+                      </div>
+                      <p className="truncate px-1 py-1 text-[10px] font-medium leading-tight text-muted-foreground group-hover:text-foreground">
+                        {asset.title ?? "Untitled"}
+                      </p>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+          </>
         ) : null}
       </section>
     </div>

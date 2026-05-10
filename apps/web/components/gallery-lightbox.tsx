@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { ChevronLeft, ChevronRight, Trash2, X } from "lucide-react";
 
@@ -29,6 +29,16 @@ export function GalleryLightbox({
   const asset = open ? assets[index] : null;
 
   const touchStartX = useRef<number | null>(null);
+  const [videoLoadError, setVideoLoadError] = useState(false);
+
+  const activeAssetId =
+    open && index !== null && index >= 0 && index < assets.length
+      ? assets[index]?.id
+      : null;
+
+  useEffect(() => {
+    setVideoLoadError(false);
+  }, [activeAssetId]);
 
   const goPrev = useCallback(() => {
     if (index === null || assets.length === 0) return;
@@ -63,6 +73,7 @@ export function GalleryLightbox({
   if (!open || !asset) return null;
 
   const title = asset.title?.trim() || "Untitled";
+  const videoMime = asset.primary_version?.mime_type;
 
   return (
     <div
@@ -156,16 +167,28 @@ export function GalleryLightbox({
         ) : null}
 
         {asset.asset_type === "video" ? (
-          <video
-            key={asset.id}
-            src={assetFileUrl(asset.id)}
-            controls
-            playsInline
-            className="max-h-[min(85vh,calc(100dvh-6rem))] max-w-full touch-pan-y rounded-lg object-contain shadow-[0_25px_80px_-12px_rgba(0,0,0,0.85)] ring-1 ring-white/20"
-            onClick={(e) => e.stopPropagation()}
-          >
-            {title}
-          </video>
+          <div className="flex max-h-full max-w-full flex-col items-center gap-3">
+            <video
+              key={asset.id}
+              controls
+              playsInline
+              preload="metadata"
+              className="max-h-[min(85vh,calc(100dvh-6rem))] max-w-full touch-pan-y rounded-lg object-contain shadow-[0_25px_80px_-12px_rgba(0,0,0,0.85)] ring-1 ring-white/20"
+              onClick={(e) => e.stopPropagation()}
+              onError={() => setVideoLoadError(true)}
+            >
+              <source src={assetFileUrl(asset.id)} type={videoMime || undefined} />
+            </video>
+            {videoLoadError ? (
+              <p className="max-w-md px-4 text-center text-sm leading-snug text-white/90">
+                Браузер не смог воспроизвести это видео. Записи экрана с Mac часто в
+                формате{" "}
+                <span className="whitespace-nowrap">.mov / HEVC</span> — в Chrome они
+                могут не поддерживаться. Откройте в Safari или экспортируйте ролик в{" "}
+                <span className="whitespace-nowrap">MP4 (H.264)</span> и загрузите снова.
+              </p>
+            ) : null}
+          </div>
         ) : (
           <img
             src={assetFileUrl(asset.id)}

@@ -590,3 +590,51 @@ Completion note:
 Tested:
 - **`npx tsc --noEmit`** in **`apps/web`** — OK.
 
+## T24 — Dashboard month strip: neutral segmented grid  [DONE]
+Priority: Low
+Status: Done
+
+Replace the **seasonal chevron + emoji** month bar (**T20**) with a calmer control aligned to the rest of the shell: **muted bordered tray**, **12 cells** (grid **6×2** on narrow viewports, **one row** from **`sm`**), **localized short month labels**, selected month uses the same **`primary`** pill treatment as **Photo / Video / Music / All**. Filtering semantics unchanged (**local calendar month**).
+
+Depends on:
+- T20 (year/month selection behavior)
+
+Completion note:
+- **`dashboard-home.tsx`**: removed **`clip-path`** chevrons, **`monthEmoji`**, seasonal gradients; added **`rounded-lg border bg-muted/40`** wrapper + **`grid-cols-6 sm:grid-cols-12`** segment buttons.
+
+Tested:
+- **`npx tsc --noEmit`** in **`apps/web`** — OK.
+
+## T25 — Dashboard All filter: Photo / Video stack + Music sidebar  [DONE]
+Priority: Medium
+Status: Done
+
+When **All** is selected on the home timeline, show **Photo** then **Video** in the **main column**, and **Music** as a **right rail** (scrollable list on large screens). Extract **`DashboardMusicList`** for reuse with the **Music-only** tab. Lightbox order for **All**: **all photos for the month**, then **all videos**; video thumb clicks use **`imagesInRange.length + j`**.
+
+Depends on:
+- T17 / T19 / T22 (dashboard filters + player)
+
+Completion note:
+- **`dashboard-home.tsx`**: **`DashboardMusicList`**; **`lightboxAssets`** / effect bounds; **`monthHasNothing`** empty copy.
+
+Tested:
+- **`npx tsc --noEmit`** in **`apps/web`** — OK.
+
+## T26 — Asset file streaming for HTML5 media + BFF hardening  [DONE]
+Priority: High
+Status: Done
+
+Browsers expect **`Accept-Ranges`** / **`Content-Length`** and often **`Range`** / **`206`** for **`<video>`** progressive playback. Implement ranged reads from S3/MinIO, **`HEAD /{asset_id}/file`**, and avoid corrupting binary streams through the Next BFF (**`Accept-Encoding: identity`** on **`…/assets/…/file`**). Lightbox: **`<source type={mime}>`**, **`onError`** copy for **HEVC/.mov** in Chrome.
+
+Depends on:
+- T10 / T21 (asset file route + versions)
+
+Completion note:
+- **`apps/api/app/storage/s3.py`**: **`head_object_content_length`**, **`iter_object_chunks(..., byte_range=)`**.
+- **`apps/api/app/api/v1/assets.py`**: **`_parse_http_range`**, **`_resolve_asset_file_parts`**, **`HEAD`** + **`GET`** streaming with **206** where applicable.
+- **`apps/web/lib/server/backend-proxy.ts`**: force **`accept-encoding: identity`** for asset **`file`** URLs.
+- **`apps/web/components/gallery-lightbox.tsx`**: video **`source`**, **`preload="metadata"`**, decode hint on error.
+
+Tested:
+- **`python3 -m py_compile`** on touched API modules — OK; **`npx tsc --noEmit`** in **`apps/web`** — OK.
+

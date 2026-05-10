@@ -8,7 +8,7 @@ from pathlib import PurePosixPath
 from uuid import UUID, uuid4
 
 from botocore.exceptions import BotoCoreError, ClientError
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile, status
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, UploadFile, status
 from fastapi.responses import Response, StreamingResponse
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -22,12 +22,73 @@ from app.db.models.timeline_entry import TimelineEntry, TimelineEntryKind
 from app.db.models.user import User, UserRole
 from app.permissions.assets import asset_read_filter_for_user, can_read_asset
 from app.schemas.asset import AssetPermissionRead, AssetRead, AssetUploadResponse, AssetVersionRead
-from app.storage.s3 import delete_object, head_object_exists, iter_object_chunks, put_object
+from app.storage.s3 import delete_object, head_object_content_length, iter_object_chunks, put_object
 from app.tasks_media import extract_asset_version_metadata
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+
+def _parse_http_range(range_header: str | None, total: int) -> tuple[int, int] | None:
+    """Parse a single ``Range: bytes=…`` value; return inclusive (start, end) or ``None`` for full body.
+
+    Multipart range lists are not implemented — returns ``None`` so the client receives a full 200
+    response (still with ``Accept-Ranges`` / ``Content-Length``, which is enough for many players).
+
+    Raises ``HTTPException(416)`` when the range is syntactically valid but unsatisfiable.
+    """
+    if total <= 0 or not range_header:
+        return None
+    h = range_header.strip()
+    if not h.lower().startswith("bytes="):
+        return None
+    spec = h[6:].strip()
+    if not spec or "," in spec:
+        return None
+
+    if spec.startswith("-"):
+        try:
+            suffix_len = int(spec[1:])
+        except ValueError:
+            return None
+        if suffix_len <= 0:
+            return None
+        start = max(0, total - suffix_len)
+        end = total - 1
+        return (start, end)
+
+    if "-" not in spec:
+        return None
+    left, right = spec.split("-", 1)
+    try:
+        start = int(left) if left.strip() else 0
+    except ValueError:
+        return None
+    if right.strip() == "":
+        end = total - 1
+    else:
+        try:
+            end = int(right)
+        except ValueError:
+            return None
+
+    if start < 0:
+        start = 0
+    if start >= total:
+        raise HTTPException(
+            status_code=status.HTTP_416_REQUESTED_RANGE_NOT_SATISFIABLE,
+            detail="Range not satisfiable",
+            headers={"Content-Range": f"bytes */{total}"},
+        )
+    end = min(end, total - 1)
+    if end < start:
+        raise HTTPException(
+            status_code=status.HTTP_416_REQUESTED_RANGE_NOT_SATISFIABLE,
+            detail="Range not satisfiable",
+            headers={"Content-Range": f"bytes */{total}"},
+        )
+    return (start, end)
 
 _MIME_TO_EXT: dict[str, str] = {
     "image/jpeg": ".jpg",
@@ -289,12 +350,11 @@ async def list_assets(
     ]
 
 
-@router.get("/{asset_id}/file")
-async def stream_asset_file(
+async def _resolve_asset_file_parts(
+    db: AsyncSession,
+    user: User,
     asset_id: UUID,
-    db: AsyncSession = Depends(get_db),
-    user: User = Depends(get_current_user),
-) -> StreamingResponse:
+) -> tuple[Asset, AssetVersion, int]:
     asset = await _load_asset_with_versions(db, asset_id)
     if asset is None or not can_read_asset(user, asset):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Asset not found")
@@ -304,20 +364,80 @@ async def stream_asset_file(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="No media version for asset",
         )
-    if not await head_object_exists(primary.storage_key):
-        logger.error("Storage object missing for asset_id=%s key=%s", asset_id, primary.storage_key)
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Media object missing",
-        )
+    try:
+        total_size = await head_object_content_length(primary.storage_key)
+    except ClientError as exc:
+        code = exc.response.get("Error", {}).get("Code", "")
+        if code in ("404", "NoSuchKey", "NotFound"):
+            logger.error(
+                "Storage object missing for asset_id=%s key=%s",
+                asset_id,
+                primary.storage_key,
+            )
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Media object missing",
+            ) from exc
+        raise
+    return asset, primary, total_size
+
+
+@router.head("/{asset_id}/file")
+async def head_asset_file(
+    asset_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> Response:
+    """Support HEAD probes (some media stacks send HEAD before ranged GET)."""
+    asset, primary, total_size = await _resolve_asset_file_parts(db, user, asset_id)
+    filename = (asset.title or str(asset.id)).replace('"', "")[:200]
+    return Response(
+        media_type=primary.mime_type,
+        headers={
+            "Content-Disposition": f'inline; filename="{filename}"',
+            "Cache-Control": "private, max-age=3600",
+            "Accept-Ranges": "bytes",
+            "Content-Length": str(total_size),
+        },
+    )
+
+
+@router.get("/{asset_id}/file")
+async def stream_asset_file(
+    request: Request,
+    asset_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> StreamingResponse:
+    asset, primary, total_size = await _resolve_asset_file_parts(db, user, asset_id)
 
     filename = (asset.title or str(asset.id)).replace('"', "")[:200]
-    headers = {
+    base_headers = {
         "Content-Disposition": f'inline; filename="{filename}"',
         "Cache-Control": "private, max-age=3600",
+        "Accept-Ranges": "bytes",
+    }
+
+    span = _parse_http_range(request.headers.get("range"), total_size)
+
+    if span is None:
+        headers = {**base_headers, "Content-Length": str(total_size)}
+        return StreamingResponse(
+            iter_object_chunks(primary.storage_key),
+            media_type=primary.mime_type,
+            headers=headers,
+        )
+
+    start, end = span
+    chunk_len = end - start + 1
+    headers = {
+        **base_headers,
+        "Content-Range": f"bytes {start}-{end}/{total_size}",
+        "Content-Length": str(chunk_len),
     }
     return StreamingResponse(
-        iter_object_chunks(primary.storage_key),
+        iter_object_chunks(primary.storage_key, byte_range=(start, end)),
+        status_code=status.HTTP_206_PARTIAL_CONTENT,
         media_type=primary.mime_type,
         headers=headers,
     )
