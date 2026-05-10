@@ -28,6 +28,11 @@ const primaryNav: NavItem[] = [
     activeMatch: (p) => p === "/gallery" || p.startsWith("/gallery/"),
   },
   {
+    href: "/video",
+    label: "Video",
+    activeMatch: (p) => p === "/video" || p.startsWith("/video/"),
+  },
+  {
     href: "/music",
     label: "Music",
     activeMatch: (p) => p === "/music" || p.startsWith("/music/"),

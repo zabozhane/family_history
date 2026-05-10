@@ -13,10 +13,10 @@ import {
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { AssetImageThumb } from "@/components/asset-image-thumb";
+import { AssetVideoThumb } from "@/components/asset-video-thumb";
 import { GalleryLightbox } from "@/components/gallery-lightbox";
 import { useMusicPlayer } from "@/components/music-player-context";
 import { ApiRequestError, apiFetch } from "@/lib/api";
-import { assetFileUrl } from "@/lib/media-url";
 import type { AssetRead } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -106,19 +106,6 @@ function monthChevronStyle(monthIndex: number, selected: boolean): string {
 const MONTH_INDEXES = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11] as const;
 
 type MediaFilter = "all" | "image" | "video" | "audio";
-
-function VideoThumb({ assetId, alt }: { assetId: string; alt: string }) {
-  return (
-    <video
-      src={assetFileUrl(assetId)}
-      className="h-full w-full object-cover"
-      muted
-      playsInline
-      preload="metadata"
-      aria-label={alt}
-    />
-  );
-}
 
 export function DashboardHome() {
   const [selectedYear, setSelectedYear] = useState(() => new Date().getFullYear());
@@ -540,9 +527,25 @@ export function DashboardHome() {
                 : mediaFilter === "all"
                   ? "No photos or videos in this month (by capture date, or upload date if none)."
                   : null}{" "}
-            <Link href="/gallery" className="font-medium text-primary underline">
-              Gallery
-            </Link>
+            {mediaFilter === "video" ? (
+              <Link href="/video" className="font-medium text-primary underline">
+                Videos
+              </Link>
+            ) : mediaFilter === "image" ? (
+              <Link href="/gallery" className="font-medium text-primary underline">
+                Gallery
+              </Link>
+            ) : (
+              <>
+                <Link href="/gallery" className="font-medium text-primary underline">
+                  Gallery
+                </Link>
+                {" or "}
+                <Link href="/video" className="font-medium text-primary underline">
+                  Videos
+                </Link>
+              </>
+            )}
           </p>
         ) : null}
 
@@ -562,7 +565,7 @@ export function DashboardHome() {
                         alt={asset.title ?? "Photo"}
                       />
                     ) : (
-                      <VideoThumb
+                      <AssetVideoThumb
                         assetId={asset.id}
                         alt={asset.title ?? "Video"}
                       />

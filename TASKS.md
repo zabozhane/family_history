@@ -569,3 +569,24 @@ Completion criteria (DoD):
 Tested:
 - **`npm run typecheck`** in **`apps/web`** — OK (includes follow-up).
 
+## T23 — Dedicated Videos route `/video`  [DONE]
+Priority: Medium
+Status: Done
+
+Add a **Videos** workspace parallel to **Photos**: authenticated **`/video`** page listing **`asset_type === "video"`**, compact upload (**`POST /api/v1/assets`** with video MIME types), grid thumbnails (**`<video preload="metadata">`**), **`GalleryLightbox`** playback, delete with confirmation (**`apiDeleteAsset`**). Expose **Video** in **`DashboardShell`** and gate **`/video`** in middleware like **`/gallery`**.
+
+Depends on:
+- T18 (gallery upload/delete/lightbox patterns)
+- T13 / T22 (asset APIs and BFF auth)
+
+Completion note:
+- **`apps/web/app/(dashboard)/video/page.tsx`** — filter videos, upload toolbar, lightbox, Russian delete modal (same UX as **`/gallery`**).
+- **`apps/web/components/video-upload-form.tsx`** — **`Add video`**, **`accept`** MP4/MOV/WebM + **`video/*`**, default **`permission_scope: private`**.
+- **`apps/web/components/asset-video-thumb.tsx`** — shared square preview; **`dashboard-home.tsx`** imports it instead of an inline **`VideoThumb`**.
+- **`apps/web/components/dashboard-shell.tsx`** — nav **Video** → **`/video`** (between Photos and Music).
+- **`apps/web/middleware.ts`** — **`/video`** in **`PROTECTED_PREFIXES`** and **`matcher`**.
+- **`dashboard-home.tsx`** — empty-month copy links **Gallery** / **Videos** by media filter.
+
+Tested:
+- **`npx tsc --noEmit`** in **`apps/web`** — OK.
+
