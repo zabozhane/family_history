@@ -11,12 +11,18 @@ import {
 } from "react";
 
 import { ApiRequestError, apiFetch } from "@/lib/api";
-import type { WorkspaceCreate, WorkspaceRead } from "@/lib/types";
+import type {
+  JoinRequestRead,
+  WorkspaceCreate,
+  WorkspaceRead,
+} from "@/lib/types";
 
 const STORAGE_KEY = "fms_active_workspace_id";
 
 type WorkspaceContextValue = {
   workspaces: WorkspaceRead[];
+  /** Join requests created by the current user (includes resolved rows). */
+  outgoingJoinRequests: JoinRequestRead[];
   activeWorkspaceId: string | null;
   activeWorkspace: WorkspaceRead | null;
   loading: boolean;
@@ -41,6 +47,9 @@ function pickInitialId(
 
 export function WorkspaceProvider({ children }: { children: ReactNode }) {
   const [workspaces, setWorkspaces] = useState<WorkspaceRead[]>([]);
+  const [outgoingJoinRequests, setOutgoingJoinRequests] = useState<
+    JoinRequestRead[]
+  >([]);
   const [activeWorkspaceId, setActiveWorkspaceIdState] = useState<
     string | null
   >(null);
@@ -52,8 +61,14 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     setLoading(true);
     setError(null);
     try {
-      const list = await apiFetch<WorkspaceRead[]>("/api/v1/workspaces");
+      const [list, joins] = await Promise.all([
+        apiFetch<WorkspaceRead[]>("/api/v1/workspaces"),
+        apiFetch<JoinRequestRead[]>("/api/v1/workspace-join-requests").catch(
+          () => [] as JoinRequestRead[],
+        ),
+      ]);
       setWorkspaces(list);
+      setOutgoingJoinRequests(joins);
       const stored =
         typeof window !== "undefined" ? localStorage.getItem(STORAGE_KEY) : null;
       const initial = pickInitialId(list, stored);
@@ -70,6 +85,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
             : "Failed to load workspaces",
       );
       setWorkspaces([]);
+      setOutgoingJoinRequests([]);
       setActiveWorkspaceIdState(null);
     } finally {
       setLoading(false);
@@ -139,6 +155,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   const value = useMemo(
     () => ({
       workspaces,
+      outgoingJoinRequests,
       activeWorkspaceId,
       activeWorkspace,
       loading,
@@ -151,6 +168,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     }),
     [
       workspaces,
+      outgoingJoinRequests,
       activeWorkspaceId,
       activeWorkspace,
       loading,

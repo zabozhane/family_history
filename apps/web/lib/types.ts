@@ -31,6 +31,16 @@ export interface UserJoinSummary {
   display_name: string;
 }
 
+/** Mirrors `JoinRequestRead` (apps/api `schemas/join_request.py`). */
+export interface JoinRequestRead {
+  id: string;
+  workspace_id: string;
+  workspace_name: string;
+  status: JoinRequestStatus;
+  created_at: string;
+  requester: UserJoinSummary | null;
+}
+
 export interface JoinRequestNotificationPayload {
   id: string;
   workspace_id: string;

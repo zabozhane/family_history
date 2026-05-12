@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 
-import { Info, Plus } from "lucide-react";
+import { Clock, Info, Plus } from "lucide-react";
 
 import { NotificationsBell } from "@/components/notifications-bell";
 import { Button } from "@/components/ui/button";
@@ -22,13 +22,19 @@ type ModalTab = "create" | "join";
 export function WorkspaceSwitcher() {
   const {
     workspaces,
+    outgoingJoinRequests,
     activeWorkspaceId,
     setActiveWorkspaceId,
     loading,
     error,
     creating,
     createWorkspace,
+    refreshWorkspaces,
   } = useWorkspace();
+
+  const pendingOutgoing = outgoingJoinRequests.filter(
+    (jr) => jr.status === "pending",
+  );
 
   const [dialogOpen, setDialogOpen] = useState(false);
   const [modalTab, setModalTab] = useState<ModalTab>("create");
@@ -75,8 +81,9 @@ export function WorkspaceSwitcher() {
         method: "POST",
         body: "{}",
       });
+      await refreshWorkspaces();
       setJoinSuccess(
-        "Request sent. The owner will review it — watch the bell icon next to that shared library.",
+        "Request sent. It appears below with a pending icon until the owner responds.",
       );
       setJoinWorkspaceId("");
     } catch (err) {
@@ -143,7 +150,7 @@ export function WorkspaceSwitcher() {
                       setInfoOpenId(null);
                     }}
                     className={cn(
-                      "flex min-w-0 flex-1 flex-col items-start px-2 py-1.5 text-left text-sm transition-colors",
+                      "flex min-w-0 flex-1 flex-col items-start justify-center px-2 py-1.5 text-left text-sm transition-colors",
                       selected
                         ? "text-accent-foreground"
                         : "text-muted-foreground hover:bg-muted/80 hover:text-foreground",
@@ -159,29 +166,33 @@ export function WorkspaceSwitcher() {
                       {kindLabel(ws.kind)} · {ws.membership_role}
                     </span>
                   </button>
-                  {ws.kind === "shared" ? (
-                    <NotificationsBell
-                      workspaceId={ws.id}
-                      workspaceName={ws.name}
-                    />
-                  ) : null}
-                  <button
-                    type="button"
-                    className={cn(
-                      "flex shrink-0 items-center justify-center rounded px-1.5 transition-colors",
-                      selected
-                        ? "text-accent-foreground hover:bg-accent-foreground/15"
-                        : "text-muted-foreground hover:bg-muted hover:text-foreground",
-                    )}
-                    aria-label={`Workspace ID: ${ws.name}`}
-                    aria-expanded={infoOpenId === ws.id}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setInfoOpenId((id) => (id === ws.id ? null : ws.id));
-                    }}
-                  >
-                    <Info className="h-3.5 w-3.5" aria-hidden />
-                  </button>
+                  <div className="flex shrink-0 items-center gap-0.5 self-stretch pr-0.5">
+                    {ws.kind === "shared" ? (
+                      <NotificationsBell
+                        workspaceId={ws.id}
+                        workspaceName={ws.name}
+                      />
+                    ) : null}
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className={cn(
+                        "h-7 w-7 shrink-0",
+                        selected
+                          ? "text-accent-foreground hover:bg-accent-foreground/15"
+                          : "text-muted-foreground",
+                      )}
+                      aria-label={`Workspace ID: ${ws.name}`}
+                      aria-expanded={infoOpenId === ws.id}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setInfoOpenId((id) => (id === ws.id ? null : ws.id));
+                      }}
+                    >
+                      <Info className="h-4 w-4" aria-hidden />
+                    </Button>
+                  </div>
                 </div>
                 {infoOpenId === ws.id ? (
                   <div className="border-t border-border/60 bg-muted/40 px-2 py-2 text-[11px] text-muted-foreground">
@@ -220,6 +231,39 @@ export function WorkspaceSwitcher() {
           })}
         </ul>
       )}
+
+      {!loading && !error && pendingOutgoing.length > 0 ? (
+        <div className="mt-3 border-t border-border/80 pt-3">
+          <p className="mb-1.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+            Pending access
+          </p>
+          <ul className="space-y-0.5">
+            {pendingOutgoing.map((jr) => (
+              <li
+                key={jr.id}
+                className="rounded-md border border-dashed border-border/80 bg-muted/30 px-2 py-1.5"
+              >
+                <div className="flex items-start gap-2">
+                  <span
+                    className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-background text-amber-600 dark:text-amber-400"
+                    title="Waiting for the owner to approve your request"
+                  >
+                    <Clock className="h-4 w-4" aria-hidden />
+                  </span>
+                  <div className="min-w-0 flex-1 pt-0.5">
+                    <p className="truncate text-sm font-medium leading-tight">
+                      {jr.workspace_name}
+                    </p>
+                    <p className="text-[10px] text-muted-foreground">
+                      Awaiting approval
+                    </p>
+                  </div>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
 
       {dialogOpen ? (
         <div
