@@ -19,6 +19,10 @@ engine: AsyncEngine = create_async_engine(
     settings.database_url_async,
     echo=False,
     pool_pre_ping=True,
+    # Video/audio streaming used to pin sessions for the whole transfer;
+    # routes are fixed to release early; keep modest headroom for bursts.
+    pool_size=10,
+    max_overflow=20,
 )
 
 AsyncSessionLocal: async_sessionmaker[AsyncSession] = async_sessionmaker(

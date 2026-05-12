@@ -14,7 +14,8 @@ from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm.attributes import set_committed_value
 
-from app.api.deps import get_current_user, get_db
+from app.api.deps import get_current_user, get_current_user_detached, get_db
+from app.db.session import AsyncSessionLocal
 from app.core.config import settings
 from app.db.models.asset import Asset, AssetType, PermissionScope
 from app.db.models.asset_version import AssetVersion
@@ -404,14 +405,15 @@ async def _resolve_asset_file_parts(
 @router.head("/{asset_id}/file")
 async def head_asset_file(
     asset_id: UUID,
-    db: AsyncSession = Depends(get_db),
-    user: User = Depends(get_current_user),
+    user: User = Depends(get_current_user_detached),
 ) -> Response:
     """Support HEAD probes (some media stacks send HEAD before ranged GET)."""
-    asset, primary, total_size = await _resolve_asset_file_parts(db, user, asset_id)
-    filename = (asset.title or str(asset.id)).replace('"', "")[:200]
+    async with AsyncSessionLocal() as db:
+        asset, primary, total_size = await _resolve_asset_file_parts(db, user, asset_id)
+        filename = (asset.title or str(asset.id)).replace('"', "")[:200]
+        mime_type = primary.mime_type
     return Response(
-        media_type=primary.mime_type,
+        media_type=mime_type,
         headers={
             "Content-Disposition": f'inline; filename="{filename}"',
             "Cache-Control": "private, max-age=3600",
@@ -425,25 +427,29 @@ async def head_asset_file(
 async def stream_asset_file(
     request: Request,
     asset_id: UUID,
-    db: AsyncSession = Depends(get_db),
-    user: User = Depends(get_current_user),
+    user: User = Depends(get_current_user_detached),
 ) -> StreamingResponse:
-    asset, primary, total_size = await _resolve_asset_file_parts(db, user, asset_id)
+    # Resolve metadata in a **short** DB session; return the stream *after* the
+    # session closes so range requests do not hold a pool connection for the
+    # whole video duration.
+    async with AsyncSessionLocal() as db:
+        asset, primary, total_size = await _resolve_asset_file_parts(db, user, asset_id)
+        filename = (asset.title or str(asset.id)).replace('"', "")[:200]
+        storage_key = primary.storage_key
+        mime_type = primary.mime_type
+        span = _parse_http_range(request.headers.get("range"), total_size)
 
-    filename = (asset.title or str(asset.id)).replace('"', "")[:200]
     base_headers = {
         "Content-Disposition": f'inline; filename="{filename}"',
         "Cache-Control": "private, max-age=3600",
         "Accept-Ranges": "bytes",
     }
 
-    span = _parse_http_range(request.headers.get("range"), total_size)
-
     if span is None:
         headers = {**base_headers, "Content-Length": str(total_size)}
         return StreamingResponse(
-            iter_object_chunks(primary.storage_key),
-            media_type=primary.mime_type,
+            iter_object_chunks(storage_key),
+            media_type=mime_type,
             headers=headers,
         )
 
@@ -455,9 +461,9 @@ async def stream_asset_file(
         "Content-Length": str(chunk_len),
     }
     return StreamingResponse(
-        iter_object_chunks(primary.storage_key, byte_range=(start, end)),
+        iter_object_chunks(storage_key, byte_range=(start, end)),
         status_code=status.HTTP_206_PARTIAL_CONTENT,
-        media_type=primary.mime_type,
+        media_type=mime_type,
         headers=headers,
     )
 

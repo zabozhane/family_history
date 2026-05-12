@@ -634,6 +634,7 @@ Completion note:
 - **`apps/api/app/api/v1/assets.py`**: **`_parse_http_range`**, **`_resolve_asset_file_parts`**, **`HEAD`** + **`GET`** streaming with **206** where applicable.
 - **`apps/web/lib/server/backend-proxy.ts`**: force **`accept-encoding: identity`** for asset **`file`** URLs.
 - **`apps/web/components/gallery-lightbox.tsx`**: video **`source`**, **`preload="metadata"`**, decode hint on error.
+- **Follow-up:** **`GET`/`HEAD …/file`** use **`get_current_user_detached`** + **`async with AsyncSessionLocal()`** so the DB session closes **before** **`StreamingResponse`** (avoids holding PostgreSQL pool connections for the entire video transfer); engine **`pool_size` / `max_overflow`** increased slightly.
 
 Tested:
 - **`python3 -m py_compile`** on touched API modules — OK; **`npx tsc --noEmit`** in **`apps/web`** — OK.
