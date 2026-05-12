@@ -48,6 +48,7 @@ export interface AssetVersionRead {
 
 export interface AssetRead {
   id: string;
+  workspace_id: string;
   owner_id: string;
   asset_type: AssetType;
   title: string | null;

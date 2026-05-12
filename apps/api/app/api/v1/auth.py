@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import get_db
 from app.core.config import settings
 from app.db.models.user import User, UserRole
+from app.services.workspace_bootstrap import create_personal_workspace_for_user
 from app.schemas.auth import LoginRequest, RefreshRequest, RegisterRequest, TokenResponse
 from app.security.password import hash_password, verify_password
 from app.security.tokens import (
@@ -52,6 +53,8 @@ async def register(body: RegisterRequest, db: AsyncSession = Depends(get_db)) ->
         role=UserRole.family,
     )
     db.add(user)
+    await db.flush()
+    await create_personal_workspace_for_user(db, user)
     try:
         await db.commit()
     except IntegrityError as exc:

@@ -12,6 +12,7 @@ from app.db.base import Base, TimestampMixin, UUIDPKMixin
 if TYPE_CHECKING:
     from app.db.models.asset import Asset
     from app.db.models.timeline_entry import TimelineEntry
+    from app.db.models.workspace import Workspace, WorkspaceMembership
 
 
 class UserRole(str, enum.Enum):
@@ -46,6 +47,16 @@ class User(Base, UUIDPKMixin, TimestampMixin):
         passive_deletes=True,
     )
     timeline_entries: Mapped[list["TimelineEntry"]] = relationship(
+        back_populates="user",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
+    workspaces_created: Mapped[list["Workspace"]] = relationship(
+        "Workspace",
+        back_populates="created_by",
+    )
+    workspace_memberships: Mapped[list["WorkspaceMembership"]] = relationship(
+        "WorkspaceMembership",
         back_populates="user",
         cascade="all, delete-orphan",
         passive_deletes=True,

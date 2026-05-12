@@ -29,6 +29,7 @@ class AssetRead(BaseModel):
     model_config: ClassVar[ConfigDict] = ConfigDict(from_attributes=True)
 
     id: UUID
+    workspace_id: UUID
     owner_id: UUID
     asset_type: AssetType
     title: str | None

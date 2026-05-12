@@ -638,3 +638,59 @@ Completion note:
 Tested:
 - **`python3 -m py_compile`** on touched API modules — OK; **`npx tsc --noEmit`** in **`apps/web`** — OK.
 
+## T27 — Workspaces (tenants), personal vs shared, and scoped asset ACL  [IN PROGRESS]
+Priority: High
+Status: In progress (backend core landed; **T28** invites / **T29** web switcher remain)
+
+**Problem (current behavior):** `UserRole.admin` could read **all** assets system-wide (`app/permissions/assets.py`). Other users saw own assets or non-private `permission_scope`. No per-tenant library.
+
+**Goal:** **Workspace** is the library unit; **`Asset.workspace_id`** scopes every asset. Visibility = **workspace membership** only (no global admin bypass for asset APIs). **Roles:** **viewer** read-only; **editor** read + upload + delete **own** assets; **owner** full delete in workspace + manage membership (invite flows → **T28**).
+
+**Shipped in repo (session):**
+- **Models:** `Workspace`, `WorkspaceMembership`, `Asset.workspace_id`; **`workspace_tenant_001`** Alembic migration (one **Personal** workspace per existing user, backfill assets).
+- **API:** `GET/POST /api/v1/workspaces`; **`GET /api/v1/assets?workspace_id=`**; upload **`workspace_id`** Form optional (defaults to user’s oldest personal owner workspace); **`AssetRead.workspace_id`**.
+- **ACL:** `permissions/assets.py` workspace-scoped filter; **`permissions/workspace_acl.py`** membership checks; **timeline** no longer uses admin shortcut.
+- **Auth:** **`create_personal_workspace_for_user`** on register (after flush).
+- **Web:** **`AssetRead.workspace_id`** in **`lib/types.ts`**.
+
+**Remaining:** invitations, adding members with roles, sidebar workspace UI + passing **`workspace_id`** from browser (**T29**).
+
+Depends on:
+- T4 / T9 / T10 / T21
+
+Completion note:
+- Run **`alembic upgrade head`** (or **`docker compose exec api alembic upgrade head`**) after deploy.
+
+Tested:
+- **`python3 -m compileall apps/api/app`** — OK; **`npx tsc --noEmit`** in **`apps/web`** — OK.
+
+## T28 — Invitations and member capabilities (read / upload / delete)  [TODO]
+Priority: High
+Status: Planned
+
+**Goal:** Invite users into **shared** workspaces by token/email; refine capabilities beyond fixed roles if needed. Depends on **T27** membership table.
+
+Depends on:
+- T27
+
+Completion note:
+- _— pending —_
+
+Tested:
+- _— pending —_
+
+## T29 — Web: active workspace context + sidebar workspace switcher  [TODO]
+Priority: Medium
+Status: Planned
+
+**Goal:** Sidebar workspace list + **+** new workspace; persist active workspace id; pass **`workspace_id`** from web to API when filtering.
+
+Depends on:
+- T27 / T28 (optional)
+
+Completion note:
+- _— pending —_
+
+Tested:
+- _— pending —_
+

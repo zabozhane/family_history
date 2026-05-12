@@ -11,7 +11,7 @@ from app.api.deps import get_current_user, get_db
 from app.db.models.asset import Asset, AssetType
 from app.db.models.asset_version import AssetVersion
 from app.db.models.timeline_entry import TimelineEntry, TimelineEntryKind
-from app.db.models.user import User, UserRole
+from app.db.models.user import User
 from app.permissions.assets import asset_read_filter_for_user
 from app.schemas.timeline import TimelineAssetRead, TimelineAssetVersionRead, TimelineItemRead
 
@@ -51,16 +51,15 @@ async def list_timeline_entries(
         stmt = stmt.where(Asset.asset_type == asset_type)
     if kind is not None:
         stmt = stmt.where(TimelineEntry.kind == kind)
-    if user.role != UserRole.admin:
-        stmt = stmt.where(
-            or_(
-                TimelineEntry.user_id == user.id,
-                and_(
-                    TimelineEntry.asset_id.is_not(None),
-                    asset_read_filter_for_user(user),
-                ),
-            )
-        )
+    stmt = stmt.where(
+        or_(
+            TimelineEntry.user_id == user.id,
+            and_(
+                TimelineEntry.asset_id.is_not(None),
+                asset_read_filter_for_user(user),
+            ),
+        ),
+    )
     result = await db.execute(stmt)
     items: list[TimelineItemRead] = []
     for entry, asset, primary_version in result.all():
