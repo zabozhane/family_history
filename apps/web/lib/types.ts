@@ -115,10 +115,18 @@ export interface AssetVersionRead {
   media_metadata: Record<string, unknown>;
 }
 
+/** Who uploaded the file (same as owner of the asset row). Mirrors `AssetUploaderRead`. */
+export interface AssetUploaderRead {
+  id: string;
+  display_name: string;
+}
+
 export interface AssetRead {
   id: string;
   workspace_id: string;
   owner_id: string;
+  /** Present when API returns uploader info (older responses may omit). */
+  uploaded_by?: AssetUploaderRead;
   asset_type: AssetType;
   title: string | null;
   description: string | null;

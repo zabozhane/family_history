@@ -18,6 +18,7 @@ import { Button } from "@/components/ui/button";
 import { ApiRequestError, apiDeleteAsset, apiFetch, buildAssetsListPath } from "@/lib/api";
 import { useWorkspace } from "@/components/workspace-context";
 import type { AssetRead } from "@/lib/types";
+import { uploadedByDisplayName } from "@/lib/utils";
 
 export default function VideoPage() {
   const { ready, activeWorkspaceId } = useWorkspace();
@@ -168,9 +169,14 @@ export default function VideoPage() {
                       alt={asset.title ?? "Video"}
                     />
                   </div>
-                  <p className="truncate px-1 py-1 text-[10px] font-medium leading-tight text-muted-foreground group-hover:text-foreground">
-                    {asset.title ?? "Untitled"}
-                  </p>
+                  <div className="px-1 py-1">
+                    <p className="truncate text-[10px] font-medium leading-tight text-muted-foreground group-hover:text-foreground">
+                      {asset.title ?? "Untitled"}
+                    </p>
+                    <p className="truncate text-[9px] leading-tight text-muted-foreground/90">
+                      {uploadedByDisplayName(asset)}
+                    </p>
+                  </div>
                 </button>
                 <button
                   type="button"

@@ -7,6 +7,7 @@ import { ChevronLeft, ChevronRight, Trash2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { assetFileUrl } from "@/lib/media-url";
 import type { AssetRead } from "@/lib/types";
+import { uploadedByDisplayName } from "@/lib/utils";
 
 export type GalleryLightboxProps = {
   assets: AssetRead[];
@@ -86,7 +87,13 @@ export function GalleryLightbox({
       }}
     >
       <div className="flex shrink-0 items-center justify-between gap-2 border-b border-white/10 bg-black/30 px-3 py-2 text-white/95 backdrop-blur-md">
-        <p className="min-w-0 truncate text-sm font-medium">{title}</p>
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-sm font-medium">{title}</p>
+          <p className="truncate text-xs text-white/55">
+            Uploaded by{" "}
+            <span className="text-white/85">{uploadedByDisplayName(asset)}</span>
+          </p>
+        </div>
         <div className="flex shrink-0 items-center gap-0.5">
           <span className="hidden text-xs tabular-nums text-white/55 sm:inline">
             {index !== null ? index + 1 : 0} / {assets.length}

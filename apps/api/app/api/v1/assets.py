@@ -12,6 +12,7 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Reques
 from fastapi.responses import Response, StreamingResponse
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 from sqlalchemy.orm.attributes import set_committed_value
 
 from app.api.deps import get_current_user, get_current_user_detached, get_db
@@ -29,7 +30,13 @@ from app.permissions.workspace_acl import (
     resolve_upload_workspace_id,
     role_can_write,
 )
-from app.schemas.asset import AssetPermissionRead, AssetRead, AssetUploadResponse, AssetVersionRead
+from app.schemas.asset import (
+    AssetPermissionRead,
+    AssetRead,
+    AssetUploaderRead,
+    AssetUploadResponse,
+    AssetVersionRead,
+)
 from app.storage.s3 import delete_object, head_object_content_length, iter_object_chunks, put_object
 from app.tasks_media import extract_asset_version_metadata
 
@@ -165,7 +172,9 @@ def _parse_captured_at(raw: str | None) -> datetime | None:
 
 
 async def _load_asset_or_404(db: AsyncSession, asset_id: UUID) -> Asset:
-    result = await db.execute(select(Asset).where(Asset.id == asset_id))
+    result = await db.execute(
+        select(Asset).where(Asset.id == asset_id).options(selectinload(Asset.owner)),
+    )
     asset = result.scalar_one_or_none()
     if asset is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Asset not found")
@@ -173,7 +182,9 @@ async def _load_asset_or_404(db: AsyncSession, asset_id: UUID) -> Asset:
 
 
 async def _load_asset_with_versions(db: AsyncSession, asset_id: UUID) -> Asset | None:
-    result = await db.execute(select(Asset).where(Asset.id == asset_id))
+    result = await db.execute(
+        select(Asset).where(Asset.id == asset_id).options(selectinload(Asset.owner)),
+    )
     asset = result.scalar_one_or_none()
     if asset is None:
         return None
@@ -196,13 +207,24 @@ def serialize_asset_read(
     asset: Asset,
     *,
     version_rows: Sequence[AssetVersion] | None = None,
+    uploader: User | None = None,
 ) -> AssetRead:
     rows = list(version_rows) if version_rows is not None else list(asset.versions)
     primary = _pick_primary_version_from_rows(rows)
+
+    if uploader is not None and uploader.id == asset.owner_id:
+        uploaded_by = AssetUploaderRead(id=uploader.id, display_name=uploader.display_name)
+    elif getattr(asset, "owner", None) is not None:
+        ou = asset.owner
+        uploaded_by = AssetUploaderRead(id=ou.id, display_name=ou.display_name)
+    else:
+        uploaded_by = AssetUploaderRead(id=asset.owner_id, display_name="Unknown")
+
     return AssetRead(
         id=asset.id,
         workspace_id=asset.workspace_id,
         owner_id=asset.owner_id,
+        uploaded_by=uploaded_by,
         asset_type=asset.asset_type,
         title=asset.title,
         description=asset.description,
@@ -318,19 +340,10 @@ async def upload_asset(
         )
 
     ver_read = AssetVersionRead.model_validate(version)
-    asset_read = AssetRead(
-        id=asset.id,
-        workspace_id=asset.workspace_id,
-        owner_id=asset.owner_id,
-        asset_type=asset.asset_type,
-        title=asset.title,
-        description=asset.description,
-        captured_at=asset.captured_at,
-        created_at=asset.created_at,
-        permission_scope=asset.permission_scope,
-        primary_version=ver_read,
+    return AssetUploadResponse(
+        asset=serialize_asset_read(asset, version_rows=[version], uploader=user),
+        version=ver_read,
     )
-    return AssetUploadResponse(asset=asset_read, version=ver_read)
 
 
 @router.get("", response_model=list[AssetRead])
@@ -348,7 +361,11 @@ async def list_assets(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Not a member of this workspace",
             )
-    stmt = select(Asset).where(asset_read_filter_for_user(user))
+    stmt = (
+        select(Asset)
+        .where(asset_read_filter_for_user(user))
+        .options(selectinload(Asset.owner))
+    )
     if workspace_id is not None:
         stmt = stmt.where(Asset.workspace_id == workspace_id)
     stmt = stmt.order_by(Asset.created_at.desc()).limit(limit).offset(offset)

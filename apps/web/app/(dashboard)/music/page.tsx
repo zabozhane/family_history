@@ -19,6 +19,7 @@ import { MusicUploadForm } from "@/components/music-upload-form";
 import { ApiRequestError, apiDeleteAsset, apiFetch, buildAssetsListPath } from "@/lib/api";
 import { useWorkspace } from "@/components/workspace-context";
 import type { AssetRead } from "@/lib/types";
+import { uploadedByDisplayName } from "@/lib/utils";
 
 function formatDuration(ms: number | null | undefined): string | null {
   if (ms == null || ms <= 0) return null;
@@ -141,9 +142,11 @@ export default function MusicPage() {
                           <CardTitle className="text-sm font-semibold leading-tight">
                             {asset.title ?? "Untitled track"}
                           </CardTitle>
-                          <CardDescription className="mt-0.5 line-clamp-1 text-xs leading-tight">
-                            {asset.description ??
-                              (duration ? `Duration ${duration}` : "Audio")}
+                          <CardDescription className="mt-0.5 line-clamp-2 text-xs leading-tight">
+                            {asset.description?.trim() ||
+                              (duration
+                                ? `Duration ${duration} · ${uploadedByDisplayName(asset)}`
+                                : `Uploaded by ${uploadedByDisplayName(asset)}`)}
                           </CardDescription>
                         </div>
                         <div className="flex shrink-0 items-center gap-0.5">

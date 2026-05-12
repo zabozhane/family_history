@@ -15,6 +15,7 @@ import {
 import { MusicPlayerBar, type RepeatMode } from "@/components/music-player-bar";
 import { assetFileUrl } from "@/lib/media-url";
 import type { AssetRead } from "@/lib/types";
+import { uploadedByDisplayName } from "@/lib/utils";
 
 function timelineMs(asset: AssetRead): number {
   if (asset.captured_at) {
@@ -266,8 +267,14 @@ export function MusicPlayerDock() {
     audioRef,
   } = useMusicPlayer();
 
+  const uploadedLabel =
+    currentTrack && uploadedByDisplayName(currentTrack) !== "Unknown"
+      ? `Uploaded by ${uploadedByDisplayName(currentTrack)}`
+      : "";
+
   const playerSubtitle =
     currentTrack?.description?.trim() ||
+    uploadedLabel ||
     (queue.length > 0
       ? `Track ${currentIndex + 1} of ${queue.length} · Family Media`
       : "");
