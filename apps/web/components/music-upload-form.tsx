@@ -7,6 +7,7 @@ import { Upload } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { ApiRequestError, apiUploadAsset } from "@/lib/api";
+import { useWorkspace } from "@/components/workspace-context";
 import type { PermissionScope } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -29,6 +30,8 @@ export type MusicUploadFormProps = {
 };
 
 export function MusicUploadForm({ onUploaded }: MusicUploadFormProps) {
+  const { activeWorkspaceId, ready } = useWorkspace();
+
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -44,6 +47,10 @@ export function MusicUploadForm({ onUploaded }: MusicUploadFormProps) {
     }
 
     setError(null);
+    if (!ready || !activeWorkspaceId) {
+      setError("Choose a workspace in the sidebar first.");
+      return;
+    }
     setSubmitting(true);
     try {
       const total = files.length;
@@ -53,6 +60,7 @@ export function MusicUploadForm({ onUploaded }: MusicUploadFormProps) {
         const fd = new FormData();
         fd.append("file", file);
         fd.append("permission_scope", scope);
+        fd.append("workspace_id", activeWorkspaceId);
         await apiUploadAsset(fd);
       }
       if (input) input.value = "";
@@ -93,7 +101,7 @@ export function MusicUploadForm({ onUploaded }: MusicUploadFormProps) {
           variant="outline"
           size="sm"
           className="gap-1.5"
-          disabled={submitting}
+          disabled={submitting || !ready || !activeWorkspaceId}
           onClick={() => fileInputRef.current?.click()}
         >
           <Upload className="h-4 w-4" aria-hidden />
@@ -112,7 +120,7 @@ export function MusicUploadForm({ onUploaded }: MusicUploadFormProps) {
           id="music-scope-inline"
           value={scope}
           onChange={(e) => setScope(e.target.value as PermissionScope)}
-          disabled={submitting}
+          disabled={submitting || !ready || !activeWorkspaceId}
           className={cn(SELECT_CLASS, "min-w-[8.5rem]")}
         >
           {PERMISSION_OPTIONS.map((opt) => (
@@ -121,7 +129,12 @@ export function MusicUploadForm({ onUploaded }: MusicUploadFormProps) {
             </option>
           ))}
         </select>
-        <Button type="button" size="sm" disabled={submitting} onClick={() => void runUpload()}>
+        <Button
+          type="button"
+          size="sm"
+          disabled={submitting || !ready || !activeWorkspaceId}
+          onClick={() => void runUpload()}
+        >
           {submitting ? "Uploading…" : "Upload"}
         </Button>
       </div>

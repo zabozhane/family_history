@@ -16,8 +16,10 @@ import {
   useMusicPlayer,
 } from "@/components/music-player-context";
 import { MusicUploadForm } from "@/components/music-upload-form";
-import { ApiRequestError, apiDeleteAsset, apiFetch } from "@/lib/api";
+import { ApiRequestError, apiDeleteAsset, apiFetch, buildAssetsListPath } from "@/lib/api";
+import { useWorkspace } from "@/components/workspace-context";
 import type { AssetRead } from "@/lib/types";
+import { uploadedByDisplayName } from "@/lib/utils";
 
 function formatDuration(ms: number | null | undefined): string | null {
   if (ms == null || ms <= 0) return null;
@@ -28,6 +30,8 @@ function formatDuration(ms: number | null | undefined): string | null {
 }
 
 export default function MusicPage() {
+  const { ready, activeWorkspaceId } = useWorkspace();
+
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
@@ -45,10 +49,18 @@ export default function MusicPage() {
 
   const reloadAssets = useCallback(
     async (opts?: { silent?: boolean }) => {
+      if (!activeWorkspaceId) {
+        replaceQueue([]);
+        if (!opts?.silent) setLoading(false);
+        setError(null);
+        return [];
+      }
       if (!opts?.silent) setLoading(true);
       setError(null);
       try {
-        const rows = await apiFetch<AssetRead[]>("/api/v1/assets?limit=200");
+        const rows = await apiFetch<AssetRead[]>(
+          buildAssetsListPath(200, activeWorkspaceId),
+        );
         const sorted = sortAudioTracks(rows);
         replaceQueue(sorted);
         return sorted;
@@ -67,12 +79,13 @@ export default function MusicPage() {
         if (!opts?.silent) setLoading(false);
       }
     },
-    [replaceQueue],
+    [replaceQueue, activeWorkspaceId],
   );
 
   useEffect(() => {
+    if (!ready) return;
     void reloadAssets();
-  }, [reloadAssets]);
+  }, [ready, reloadAssets]);
 
   const executeDelete = useCallback(async () => {
     if (!confirmDeleteId) return;
@@ -129,9 +142,11 @@ export default function MusicPage() {
                           <CardTitle className="text-sm font-semibold leading-tight">
                             {asset.title ?? "Untitled track"}
                           </CardTitle>
-                          <CardDescription className="mt-0.5 line-clamp-1 text-xs leading-tight">
-                            {asset.description ??
-                              (duration ? `Duration ${duration}` : "Audio")}
+                          <CardDescription className="mt-0.5 line-clamp-2 text-xs leading-tight">
+                            {asset.description?.trim() ||
+                              (duration
+                                ? `Duration ${duration} · ${uploadedByDisplayName(asset)}`
+                                : `Uploaded by ${uploadedByDisplayName(asset)}`)}
                           </CardDescription>
                         </div>
                         <div className="flex shrink-0 items-center gap-0.5">

@@ -9,6 +9,15 @@ from app.db.models.asset import Asset, AssetType, PermissionScope
 from app.db.models.asset_version import AssetVersion
 from app.db.models.timeline_entry import TimelineEntry, TimelineEntryKind
 from app.db.models.user import User, UserRole
+from app.db.models.workspace import (
+    Workspace,
+    WorkspaceKind,
+    WorkspaceMembership,
+    WorkspaceMembershipRole,
+)
+from app.db.models.notification import Notification
+from app.db.models.workspace_invitation import WorkspaceInvitation
+from app.db.models.workspace_join_request import JoinRequestStatus, WorkspaceJoinRequest
 
 __all__ = [
     "Asset",
@@ -19,4 +28,12 @@ __all__ = [
     "TimelineEntryKind",
     "User",
     "UserRole",
+    "Workspace",
+    "WorkspaceKind",
+    "WorkspaceMembership",
+    "WorkspaceMembershipRole",
+    "WorkspaceInvitation",
+    "WorkspaceJoinRequest",
+    "JoinRequestStatus",
+    "Notification",
 ]

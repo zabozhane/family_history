@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy import and_, or_, select
@@ -11,8 +12,9 @@ from app.api.deps import get_current_user, get_db
 from app.db.models.asset import Asset, AssetType
 from app.db.models.asset_version import AssetVersion
 from app.db.models.timeline_entry import TimelineEntry, TimelineEntryKind
-from app.db.models.user import User, UserRole
+from app.db.models.user import User
 from app.permissions.assets import asset_read_filter_for_user
+from app.permissions.workspace_acl import require_workspace_member
 from app.schemas.timeline import TimelineAssetRead, TimelineAssetVersionRead, TimelineItemRead
 
 router = APIRouter()
@@ -26,9 +28,13 @@ async def list_timeline_entries(
     occurred_to: datetime | None = Query(default=None, alias="to"),
     asset_type: AssetType | None = Query(default=None),
     kind: TimelineEntryKind | None = Query(default=None),
+    workspace_id: UUID | None = Query(default=None),
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
 ) -> list[TimelineItemRead]:
+    if workspace_id is not None:
+        await require_workspace_member(db, user, workspace_id)
+
     stmt = (
         select(TimelineEntry, Asset, AssetVersion)
         .outerjoin(Asset, TimelineEntry.asset_id == Asset.id)
@@ -51,16 +57,17 @@ async def list_timeline_entries(
         stmt = stmt.where(Asset.asset_type == asset_type)
     if kind is not None:
         stmt = stmt.where(TimelineEntry.kind == kind)
-    if user.role != UserRole.admin:
-        stmt = stmt.where(
-            or_(
-                TimelineEntry.user_id == user.id,
-                and_(
-                    TimelineEntry.asset_id.is_not(None),
-                    asset_read_filter_for_user(user),
-                ),
-            )
-        )
+    if workspace_id is not None:
+        stmt = stmt.where(Asset.workspace_id == workspace_id)
+    stmt = stmt.where(
+        or_(
+            TimelineEntry.user_id == user.id,
+            and_(
+                TimelineEntry.asset_id.is_not(None),
+                asset_read_filter_for_user(user),
+            ),
+        ),
+    )
     result = await db.execute(stmt)
     items: list[TimelineItemRead] = []
     for entry, asset, primary_version in result.all():

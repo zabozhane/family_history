@@ -9,9 +9,20 @@ export function getPublicApiBaseUrl(): string {
   return raw && raw.length > 0 ? raw : "http://localhost:8000";
 }
 
-/** Prefer Docker-internal URL for server-side proxy hops; fall back to public URL for local dev. */
+/**
+ * Server-side URL for proxy Route Handlers (`/api/session/*`).
+ *
+ * Use Docker-internal hostname only when explicitly opted in (Compose sets
+ * `RUNNING_IN_DOCKER=true`). Otherwise always use the public URL — avoids 500s when
+ * running `next dev` on the host with `API_INTERNAL_BASE_URL=http://api:8000` in `.env`.
+ */
 export function getBackendBaseUrl(): string {
   const internal = process.env.API_INTERNAL_BASE_URL?.trim();
-  if (internal && internal.length > 0) return internal;
+  const useInternal =
+    process.env.RUNNING_IN_DOCKER === "true" ||
+    process.env.FMS_USE_INTERNAL_API === "true";
+  if (useInternal && internal && internal.length > 0) {
+    return internal;
+  }
   return getPublicApiBaseUrl();
 }

@@ -10,6 +10,15 @@ from pydantic import BaseModel, ConfigDict
 from app.db.models.asset import AssetType, PermissionScope
 
 
+class AssetUploaderRead(BaseModel):
+    """User who owns / uploaded the asset (same as ``Asset.owner_id``)."""
+
+    model_config: ClassVar[ConfigDict] = ConfigDict(from_attributes=True)
+
+    id: UUID
+    display_name: str
+
+
 class AssetVersionRead(BaseModel):
     model_config: ClassVar[ConfigDict] = ConfigDict(from_attributes=True)
 
@@ -29,7 +38,9 @@ class AssetRead(BaseModel):
     model_config: ClassVar[ConfigDict] = ConfigDict(from_attributes=True)
 
     id: UUID
+    workspace_id: UUID
     owner_id: UUID
+    uploaded_by: AssetUploaderRead
     asset_type: AssetType
     title: str | None
     description: str | None

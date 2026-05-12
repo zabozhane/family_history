@@ -16,9 +16,10 @@ import { AssetImageThumb } from "@/components/asset-image-thumb";
 import { AssetVideoThumb } from "@/components/asset-video-thumb";
 import { GalleryLightbox } from "@/components/gallery-lightbox";
 import { useMusicPlayer } from "@/components/music-player-context";
-import { ApiRequestError, apiFetch } from "@/lib/api";
+import { ApiRequestError, apiFetch, buildAssetsListPath } from "@/lib/api";
+import { useWorkspace } from "@/components/workspace-context";
 import type { AssetRead } from "@/lib/types";
-import { cn } from "@/lib/utils";
+import { cn, uploadedByDisplayName } from "@/lib/utils";
 
 /** Playlist order: media in the selected month by timeline instant, newest first. */
 const FETCH_LIMIT = 200;
@@ -106,8 +107,11 @@ function DashboardMusicList({
                   <CardTitle className="text-sm font-semibold leading-tight">
                     {asset.title ?? "Untitled track"}
                   </CardTitle>
-                  <CardDescription className="mt-0.5 line-clamp-1 text-xs leading-tight">
-                    {asset.description ?? (duration ? `Duration ${duration}` : "Audio")}
+                  <CardDescription className="mt-0.5 line-clamp-2 text-xs leading-tight">
+                    {asset.description?.trim() ||
+                      (duration
+                        ? `Duration ${duration} · ${uploadedByDisplayName(asset)}`
+                        : `Uploaded by ${uploadedByDisplayName(asset)}`)}
                   </CardDescription>
                 </div>
                 <div className="flex shrink-0 items-center gap-0.5">
@@ -136,6 +140,8 @@ function DashboardMusicList({
 }
 
 export function DashboardHome() {
+  const { ready, activeWorkspaceId } = useWorkspace();
+
   const [selectedYear, setSelectedYear] = useState(() => new Date().getFullYear());
   const [selectedMonthIndex, setSelectedMonthIndex] = useState(() => new Date().getMonth());
 
@@ -185,8 +191,19 @@ export function DashboardHome() {
   }, [selectedYear, selectedMonthIndex]);
 
   useEffect(() => {
+    if (!ready) return;
+    if (!activeWorkspaceId) {
+      setAssets([]);
+      setLoading(false);
+      setError(null);
+      return;
+    }
     let cancelled = false;
-    apiFetch<AssetRead[]>(`/api/v1/assets?limit=${FETCH_LIMIT}`)
+    setLoading(true);
+    setError(null);
+    apiFetch<AssetRead[]>(
+      buildAssetsListPath(FETCH_LIMIT, activeWorkspaceId),
+    )
       .then((rows) => {
         if (!cancelled) setAssets(rows);
       })
@@ -207,7 +224,7 @@ export function DashboardHome() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [ready, activeWorkspaceId]);
 
   const assetsInMonth = useMemo(() => {
     const { rangeStart, rangeEnd } = selectedMonthRange;
@@ -306,10 +323,26 @@ export function DashboardHome() {
     }
   }, [lightboxAssets, lightboxIndex, mediaFilter]);
 
-  if (loading) {
+  if (!ready || loading) {
     return (
       <div className="flex flex-1 flex-col px-6 py-10">
         <p className="text-muted-foreground">Loading your library…</p>
+      </div>
+    );
+  }
+
+  if (!activeWorkspaceId) {
+    return (
+      <div className="flex flex-1 flex-col px-6 py-10">
+        <Card className="max-w-lg">
+          <CardHeader>
+            <CardTitle>No workspace</CardTitle>
+            <CardDescription>
+              Create a library using <strong className="font-medium">+</strong> in the sidebar,
+              or refresh the page.
+            </CardDescription>
+          </CardHeader>
+        </Card>
       </div>
     );
   }
@@ -540,9 +573,14 @@ export function DashboardHome() {
                                 alt={asset.title ?? "Photo"}
                               />
                             </div>
-                            <p className="truncate px-1 py-1 text-[10px] font-medium leading-tight text-muted-foreground group-hover:text-foreground">
-                              {asset.title ?? "Untitled"}
-                            </p>
+                            <div className="px-1 py-1">
+                              <p className="truncate text-[10px] font-medium leading-tight text-muted-foreground group-hover:text-foreground">
+                                {asset.title ?? "Untitled"}
+                              </p>
+                              <p className="truncate text-[9px] leading-tight text-muted-foreground/90">
+                                {uploadedByDisplayName(asset)}
+                              </p>
+                            </div>
                           </button>
                         </li>
                       ))}
@@ -577,9 +615,14 @@ export function DashboardHome() {
                                 alt={asset.title ?? "Video"}
                               />
                             </div>
-                            <p className="truncate px-1 py-1 text-[10px] font-medium leading-tight text-muted-foreground group-hover:text-foreground">
-                              {asset.title ?? "Untitled"}
-                            </p>
+                            <div className="px-1 py-1">
+                              <p className="truncate text-[10px] font-medium leading-tight text-muted-foreground group-hover:text-foreground">
+                                {asset.title ?? "Untitled"}
+                              </p>
+                              <p className="truncate text-[9px] leading-tight text-muted-foreground/90">
+                                {uploadedByDisplayName(asset)}
+                              </p>
+                            </div>
                           </button>
                         </li>
                       ))}
@@ -655,9 +698,14 @@ export function DashboardHome() {
                           />
                         )}
                       </div>
-                      <p className="truncate px-1 py-1 text-[10px] font-medium leading-tight text-muted-foreground group-hover:text-foreground">
-                        {asset.title ?? "Untitled"}
-                      </p>
+                      <div className="px-1 py-1">
+                        <p className="truncate text-[10px] font-medium leading-tight text-muted-foreground group-hover:text-foreground">
+                          {asset.title ?? "Untitled"}
+                        </p>
+                        <p className="truncate text-[9px] leading-tight text-muted-foreground/90">
+                          {uploadedByDisplayName(asset)}
+                        </p>
+                      </div>
                     </button>
                   </li>
                 ))}

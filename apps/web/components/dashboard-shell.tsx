@@ -6,6 +6,8 @@ import type { ReactNode } from "react";
 
 import { MusicPlayerDock, useMusicPlayer } from "@/components/music-player-context";
 import { SignOutButton } from "@/components/sign-out-button";
+import { WorkspaceProvider } from "@/components/workspace-context";
+import { WorkspaceSwitcher } from "@/components/workspace-switcher";
 import { cn } from "@/lib/utils";
 
 const PROJECT_TITLE = "Family Media";
@@ -40,6 +42,14 @@ const primaryNav: NavItem[] = [
 ];
 
 export function DashboardShell({ children }: { children: ReactNode }) {
+  return (
+    <WorkspaceProvider>
+      <DashboardShellInner>{children}</DashboardShellInner>
+    </WorkspaceProvider>
+  );
+}
+
+function DashboardShellInner({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const { playerVisible, queue } = useMusicPlayer();
   const reserveDockSpace =
@@ -58,7 +68,9 @@ export function DashboardShell({ children }: { children: ReactNode }) {
           >
             {PROJECT_TITLE}
           </Link>
-          <p className="mt-1 text-xs text-muted-foreground">Family workspace</p>
+          <div className="mt-3">
+            <WorkspaceSwitcher />
+          </div>
         </div>
         <nav
           className="flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto px-2 py-3"
@@ -116,3 +128,4 @@ export function DashboardShell({ children }: { children: ReactNode }) {
     </div>
   );
 }
+

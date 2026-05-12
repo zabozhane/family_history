@@ -9,6 +9,8 @@ export type TimelineFetchFilters = {
   to?: string;
   assetType?: AssetType | null;
   kind?: TimelineEntryKind | null;
+  /** Active library workspace (T29). */
+  workspaceId?: string | null;
 };
 
 /** Query string for `GET /api/v1/timeline` (FastAPI aliases `from` / `to`). */
@@ -22,6 +24,7 @@ export function buildTimelineSearchParams(filters: TimelineFetchFilters): string
   if (filters.to) sp.set("to", filters.to);
   if (filters.assetType) sp.set("asset_type", filters.assetType);
   if (filters.kind) sp.set("kind", filters.kind);
+  if (filters.workspaceId) sp.set("workspace_id", filters.workspaceId);
   return sp.toString();
 }
 

@@ -19,6 +19,7 @@ if TYPE_CHECKING:
     from app.db.models.asset_version import AssetVersion
     from app.db.models.timeline_entry import TimelineEntry
     from app.db.models.user import User
+    from app.db.models.workspace import Workspace
 
 
 class AssetType(str, enum.Enum):
@@ -44,6 +45,12 @@ class PermissionScope(str, enum.Enum):
 class Asset(Base, UUIDPKMixin, TimestampMixin):
     __tablename__ = "assets"
 
+    workspace_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("workspaces.id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
+    )
     owner_id: Mapped[UUID] = mapped_column(
         PGUUID(as_uuid=True),
         ForeignKey("users.id", ondelete="CASCADE"),
@@ -70,6 +77,7 @@ class Asset(Base, UUIDPKMixin, TimestampMixin):
         server_default=PermissionScope.private.value,
     )
 
+    workspace: Mapped["Workspace"] = relationship(back_populates="assets")
     owner: Mapped["User"] = relationship(back_populates="assets")
     versions: Mapped[list["AssetVersion"]] = relationship(
         back_populates="asset",

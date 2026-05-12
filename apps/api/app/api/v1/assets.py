@@ -12,16 +12,31 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Reques
 from fastapi.responses import Response, StreamingResponse
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 from sqlalchemy.orm.attributes import set_committed_value
 
-from app.api.deps import get_current_user, get_db
+from app.api.deps import get_current_user, get_current_user_detached, get_db
+from app.db.session import AsyncSessionLocal
 from app.core.config import settings
 from app.db.models.asset import Asset, AssetType, PermissionScope
 from app.db.models.asset_version import AssetVersion
 from app.db.models.timeline_entry import TimelineEntry, TimelineEntryKind
-from app.db.models.user import User, UserRole
-from app.permissions.assets import asset_read_filter_for_user, can_read_asset
-from app.schemas.asset import AssetPermissionRead, AssetRead, AssetUploadResponse, AssetVersionRead
+from app.db.models.user import User
+from app.permissions.assets import asset_read_filter_for_user
+from app.permissions.workspace_acl import (
+    assert_can_delete_asset,
+    assert_can_read_asset,
+    get_membership,
+    resolve_upload_workspace_id,
+    role_can_write,
+)
+from app.schemas.asset import (
+    AssetPermissionRead,
+    AssetRead,
+    AssetUploaderRead,
+    AssetUploadResponse,
+    AssetVersionRead,
+)
 from app.storage.s3 import delete_object, head_object_content_length, iter_object_chunks, put_object
 from app.tasks_media import extract_asset_version_metadata
 
@@ -157,7 +172,9 @@ def _parse_captured_at(raw: str | None) -> datetime | None:
 
 
 async def _load_asset_or_404(db: AsyncSession, asset_id: UUID) -> Asset:
-    result = await db.execute(select(Asset).where(Asset.id == asset_id))
+    result = await db.execute(
+        select(Asset).where(Asset.id == asset_id).options(selectinload(Asset.owner)),
+    )
     asset = result.scalar_one_or_none()
     if asset is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Asset not found")
@@ -165,7 +182,9 @@ async def _load_asset_or_404(db: AsyncSession, asset_id: UUID) -> Asset:
 
 
 async def _load_asset_with_versions(db: AsyncSession, asset_id: UUID) -> Asset | None:
-    result = await db.execute(select(Asset).where(Asset.id == asset_id))
+    result = await db.execute(
+        select(Asset).where(Asset.id == asset_id).options(selectinload(Asset.owner)),
+    )
     asset = result.scalar_one_or_none()
     if asset is None:
         return None
@@ -188,12 +207,24 @@ def serialize_asset_read(
     asset: Asset,
     *,
     version_rows: Sequence[AssetVersion] | None = None,
+    uploader: User | None = None,
 ) -> AssetRead:
     rows = list(version_rows) if version_rows is not None else list(asset.versions)
     primary = _pick_primary_version_from_rows(rows)
+
+    if uploader is not None and uploader.id == asset.owner_id:
+        uploaded_by = AssetUploaderRead(id=uploader.id, display_name=uploader.display_name)
+    elif getattr(asset, "owner", None) is not None:
+        ou = asset.owner
+        uploaded_by = AssetUploaderRead(id=ou.id, display_name=ou.display_name)
+    else:
+        uploaded_by = AssetUploaderRead(id=asset.owner_id, display_name="Unknown")
+
     return AssetRead(
         id=asset.id,
+        workspace_id=asset.workspace_id,
         owner_id=asset.owner_id,
+        uploaded_by=uploaded_by,
         asset_type=asset.asset_type,
         title=asset.title,
         description=asset.description,
@@ -215,6 +246,7 @@ async def upload_asset(
     description: str | None = Form(None),
     captured_at: str | None = Form(None),
     permission_scope: PermissionScope = Form(PermissionScope.private),
+    workspace_id: UUID | None = Form(None),
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
 ) -> AssetUploadResponse:
@@ -240,6 +272,8 @@ async def upload_asset(
         )
 
     ct_parsed = _parse_captured_at(captured_at)
+    resolved_workspace_id = await resolve_upload_workspace_id(db, user, workspace_id)
+
     asset_id: UUID = uuid4()
     version_id: UUID = uuid4()
     ext = _suffix_from_upload(file.filename, mime)
@@ -247,6 +281,7 @@ async def upload_asset(
 
     asset = Asset(
         id=asset_id,
+        workspace_id=resolved_workspace_id,
         owner_id=user.id,
         asset_type=asset_type,
         title=_resolved_asset_title(title, file.filename),
@@ -305,34 +340,35 @@ async def upload_asset(
         )
 
     ver_read = AssetVersionRead.model_validate(version)
-    asset_read = AssetRead(
-        id=asset.id,
-        owner_id=asset.owner_id,
-        asset_type=asset.asset_type,
-        title=asset.title,
-        description=asset.description,
-        captured_at=asset.captured_at,
-        created_at=asset.created_at,
-        permission_scope=asset.permission_scope,
-        primary_version=ver_read,
+    return AssetUploadResponse(
+        asset=serialize_asset_read(asset, version_rows=[version], uploader=user),
+        version=ver_read,
     )
-    return AssetUploadResponse(asset=asset_read, version=ver_read)
 
 
 @router.get("", response_model=list[AssetRead])
 async def list_assets(
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
+    workspace_id: UUID | None = Query(None),
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
 ) -> list[AssetRead]:
+    if workspace_id is not None:
+        m = await get_membership(db, user_id=user.id, workspace_id=workspace_id)
+        if m is None:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Not a member of this workspace",
+            )
     stmt = (
         select(Asset)
         .where(asset_read_filter_for_user(user))
-        .order_by(Asset.created_at.desc())
-        .limit(limit)
-        .offset(offset)
+        .options(selectinload(Asset.owner))
     )
+    if workspace_id is not None:
+        stmt = stmt.where(Asset.workspace_id == workspace_id)
+    stmt = stmt.order_by(Asset.created_at.desc()).limit(limit).offset(offset)
     result = await db.execute(stmt)
     assets = result.scalars().all()
     if not assets:
@@ -356,8 +392,9 @@ async def _resolve_asset_file_parts(
     asset_id: UUID,
 ) -> tuple[Asset, AssetVersion, int]:
     asset = await _load_asset_with_versions(db, asset_id)
-    if asset is None or not can_read_asset(user, asset):
+    if asset is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Asset not found")
+    await assert_can_read_asset(db, user, asset)
     primary = _pick_primary_version_from_rows(list(asset.versions))
     if primary is None:
         raise HTTPException(
@@ -385,14 +422,15 @@ async def _resolve_asset_file_parts(
 @router.head("/{asset_id}/file")
 async def head_asset_file(
     asset_id: UUID,
-    db: AsyncSession = Depends(get_db),
-    user: User = Depends(get_current_user),
+    user: User = Depends(get_current_user_detached),
 ) -> Response:
     """Support HEAD probes (some media stacks send HEAD before ranged GET)."""
-    asset, primary, total_size = await _resolve_asset_file_parts(db, user, asset_id)
-    filename = (asset.title or str(asset.id)).replace('"', "")[:200]
+    async with AsyncSessionLocal() as db:
+        asset, primary, total_size = await _resolve_asset_file_parts(db, user, asset_id)
+        filename = (asset.title or str(asset.id)).replace('"', "")[:200]
+        mime_type = primary.mime_type
     return Response(
-        media_type=primary.mime_type,
+        media_type=mime_type,
         headers={
             "Content-Disposition": f'inline; filename="{filename}"',
             "Cache-Control": "private, max-age=3600",
@@ -406,25 +444,29 @@ async def head_asset_file(
 async def stream_asset_file(
     request: Request,
     asset_id: UUID,
-    db: AsyncSession = Depends(get_db),
-    user: User = Depends(get_current_user),
+    user: User = Depends(get_current_user_detached),
 ) -> StreamingResponse:
-    asset, primary, total_size = await _resolve_asset_file_parts(db, user, asset_id)
+    # Resolve metadata in a **short** DB session; return the stream *after* the
+    # session closes so range requests do not hold a pool connection for the
+    # whole video duration.
+    async with AsyncSessionLocal() as db:
+        asset, primary, total_size = await _resolve_asset_file_parts(db, user, asset_id)
+        filename = (asset.title or str(asset.id)).replace('"', "")[:200]
+        storage_key = primary.storage_key
+        mime_type = primary.mime_type
+        span = _parse_http_range(request.headers.get("range"), total_size)
 
-    filename = (asset.title or str(asset.id)).replace('"', "")[:200]
     base_headers = {
         "Content-Disposition": f'inline; filename="{filename}"',
         "Cache-Control": "private, max-age=3600",
         "Accept-Ranges": "bytes",
     }
 
-    span = _parse_http_range(request.headers.get("range"), total_size)
-
     if span is None:
         headers = {**base_headers, "Content-Length": str(total_size)}
         return StreamingResponse(
-            iter_object_chunks(primary.storage_key),
-            media_type=primary.mime_type,
+            iter_object_chunks(storage_key),
+            media_type=mime_type,
             headers=headers,
         )
 
@@ -436,9 +478,9 @@ async def stream_asset_file(
         "Content-Length": str(chunk_len),
     }
     return StreamingResponse(
-        iter_object_chunks(primary.storage_key, byte_range=(start, end)),
+        iter_object_chunks(storage_key, byte_range=(start, end)),
         status_code=status.HTTP_206_PARTIAL_CONTENT,
-        media_type=primary.mime_type,
+        media_type=mime_type,
         headers=headers,
     )
 
@@ -452,8 +494,7 @@ async def delete_asset(
     asset = await _load_asset_with_versions(db, asset_id)
     if asset is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Asset not found")
-    if asset.owner_id != user.id and user.role != UserRole.admin:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Cannot delete this asset")
+    await assert_can_delete_asset(db, user, asset)
     for ver in list(asset.versions):
         try:
             await delete_object(ver.storage_key)
@@ -477,9 +518,7 @@ async def get_asset(
     asset = await _load_asset_with_versions(db, asset_id)
     if asset is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Asset not found")
-    if not can_read_asset(user, asset):
-        # Return 404 to avoid leaking existence.
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Asset not found")
+    await assert_can_read_asset(db, user, asset)
     return serialize_asset_read(asset)
 
 
@@ -490,10 +529,10 @@ async def get_asset_permission(
     user: User = Depends(get_current_user),
 ) -> AssetPermissionRead:
     asset = await _load_asset_or_404(db, asset_id)
-    if not can_read_asset(user, asset):
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Asset not found")
+    await assert_can_read_asset(db, user, asset)
+    m = await get_membership(db, user_id=user.id, workspace_id=asset.workspace_id)
     is_owner = asset.owner_id == user.id
-    can_edit = is_owner or user.role == UserRole.admin
+    can_edit = bool(m and role_can_write(m.role))
     return AssetPermissionRead(
         asset_id=asset.id,
         permission_scope=asset.permission_scope,

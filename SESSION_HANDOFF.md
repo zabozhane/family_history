@@ -1,44 +1,46 @@
 # Session Handoff
 
 ## Completed In This Session
-**Gallery UX + Timeline dashboard + music queue behaviour.**
+**Workspace collaboration: join requests, notifications, sidebar UX, members page.**
 
-### Gallery (`/gallery`)
-- **`gallery-upload-form.tsx`**: компактная панель как у музыки (без большой Card), убран выбор **Private** — всегда **`permission_scope: private`** в FormData.
-- **`gallery-lightbox.tsx`** (новый): полноэкранный просмотр фото; фон **`backdrop-blur`** + затемнение; для **video** — **`<video controls>`**, для изображений — **`<img>`**; стрелки, свайп, Escape; опционально удаление через **`onRequestDelete`**.
-- **`gallery/page.tsx`**: плотная сетка превью как на таймлайне; клик открывает лайтбокс; удаление фото с модалкой; корзина на превью.
+### Backend (already wired to existing T28 members API)
+- **Migrations:** `join_requests_notifications_003`, `notifications_workspace_id_004` — join requests table, notifications + `workspace_id` for filtering.
+- **Routes:** `workspace_join_requests.py`, `notifications.py`; list/read notifications with optional `workspace_id`; join request create/respond/cancel; `GET /api/v1/workspace-join-requests` for the current user’s outgoing requests.
 
-### Timeline / главная (`dashboard-home.tsx`)
-- Узкая полоска месяцев (меньший notch, ниже высота, короткие подписи через **Intl**).
-- Строка **«Месяц Год»** + фильтры **Photo / Video / Music / All**; для месяца собираются **image / video / audio** по дате таймлайна.
-- Сетка фото/видео как на Photos (много колонок, мелкие ячейки).
-- Убран нижний встроенный **music player** на главной.
-- Вкладка **Music**: список треков месяца с Play/Pause через глобальный плеер; очередь **не** пересобирается при смене месяца автоматически — только по клику (**`loadQueueAndPlay`**).
-- **`GalleryLightbox`** на таймлайне для превью (те же **`visualForFilter`**).
+### Web
+- **`workspace-context.tsx`:** loads **`/api/v1/workspace-join-requests`** alongside workspaces; **`refreshWorkspaces`** refreshes both.
+- **`workspace-switcher.tsx`:** **+** modal tabs Create / Join (UUID); **Info** expands copy-ID block; **NotificationsBell** only for **`kind === "shared"`**, aligned with Info; **Pending access** block for outgoing **pending** joins (clock icon); **Members** button → library members UI.
+- **`notifications-bell.tsx`:** portal + **fixed** overlay; opaque panel; **`/api/v1/notifications?workspace_id=`**; owner approve/decline with role.
+- **`lib/env/server.ts` + `docker-compose.yml` (`RUNNING_IN_DOCKER`):** Next BFF reaches **`http://api:8000`** inside Compose.
+- **`app/api/session/login` & `register`:** safer errors (**502/503**) when backend unreachable.
+- **`app/(dashboard)/workspace/[workspaceId]/members/page.tsx`:** member list; **owner** — change viewer/editor (**PATCH**) + **Remove** (**DELETE**); non-owners read-only.
+- **`lib/types.ts`:** `JoinRequestRead`, `WorkspaceMemberRead`, notification kind constants.
 
-### Плеер (`music-player-context.tsx`)
-- **`loadQueueAndPlay(tracks, index)`** — замена очереди и старт трека одним действием (таймлайн Music).
+### TASKS.md
+- **T27** marked **DONE** (optional polish called out).
+- **T29** completion note extended (switcher, env, session routes).
+- **T30** added — documents join requests + notifications + members UI.
 
-### Прочее
-- **`textarch.txt`** в корне — краткое текстовое описание Docker-сервисов и потоков данных.
-
-Convention: **`TASKS.md`** T22 follow-up bullets + this file.
+Convention: keep **`TASKS.md`** in sync when shipping workspace/auth/web changes.
 
 ## Test Summary
-- **`npm run typecheck`** (**`apps/web`**) — run before commit.
+- **`npx tsc --noEmit`** in **`apps/web`** before commit.
+- After API/image changes: **`docker compose build api web worker && docker compose up -d`**, then **`docker compose exec api alembic upgrade head`**.
 
 ## How To Test (repeatable)
-- **`/gallery`**: компактная загрузка, лайтбокс, удаление, без дропдауна видимости.
-- **`/`** (Timeline): фильтры, месяцы, лайтбокс по клику на превью; Music — список треков, воспроизведение не обрывается при смене месяца без нового Play.
+- **Docker:** app at **http://localhost:3000**, API **http://localhost:8000**.
+- **Join flow:** second user → **+** → Join existing → paste shared workspace UUID → request appears under **Pending access**; owner sees bell on that shared library → approve/decline.
+- **Members:** sidebar → **Info** on a library → **Members** → as owner, change roles / remove (not owner row); as non-owner, list is read-only.
+- **Personal library:** no bell; shared only.
 
 ## Current Stack State
-**T22** done + web UX iterations (gallery + home timeline).
+**T27 / T28 / T29 / T30** done for join requests, notifications, and members UI. Alembic head: **`notifications_workspace_id_004`**.
 
 ## Known Issues / Risks
-- При пустом месяце на вкладке Music очередь плеера может не совпадать со списком на экране до следующего клика Play — ожидаемо.
+- Docker **`COPY migrations`** layer can stay cached if a new migration file was added without rebuilding — run **`docker compose build api`** (or **`--no-cache`**) so new revision files appear in the image before **`alembic upgrade`**.
 
 ## Next Recommended Task
-Worker **`duration_ms`**, отдельная страница `/timeline`, доработки галереи.
+Optional **T27** polish (email delivery for invitation links, “leave workspace”); worker **`duration_ms`**; product backlog in repo root / issues.
 
 ## Notes For Next Session
 - None.

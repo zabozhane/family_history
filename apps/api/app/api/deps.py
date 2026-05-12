@@ -75,6 +75,60 @@ async def get_current_user(
     return user
 
 
+async def get_current_user_detached(
+    credentials: Annotated[
+        HTTPAuthorizationCredentials | None,
+        Depends(_bearer),
+    ],
+) -> User:
+    """Load the user in a **short** session and **expunge** so the ORM instance
+    outlives the session. Use for **StreamingResponse** routes: the default
+    :func:`get_current_user` + :func:`get_db` pair would keep a pool connection
+    open until the entire media body is sent (long video = pool exhaustion)."""
+    if credentials is None or credentials.scheme.lower() != "bearer":
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Not authenticated",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    token = credentials.credentials
+    try:
+        payload = decode_token(token)
+    except JWTError:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Could not validate credentials",
+            headers={"WWW-Authenticate": "Bearer"},
+        ) from None
+
+    if payload.get("token_type") != TOKEN_TYPE_ACCESS:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid access token",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    try:
+        user_id = UUID(str(payload.get("sub")))
+    except (TypeError, ValueError) as exc:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid token subject",
+        ) from exc
+
+    async with AsyncSessionLocal() as session:
+        result = await session.execute(select(User).where(User.id == user_id))
+        user = result.scalar_one_or_none()
+        if user is None or not user.is_active:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="User inactive or not found",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+        session.expunge(user)
+        return user
+
+
 def require_roles(*allowed_roles: UserRole):
     """Return a FastAPI dependency enforcing membership in ``allowed_roles``."""
 

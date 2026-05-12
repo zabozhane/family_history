@@ -2,6 +2,75 @@
 
 export type UserRole = "admin" | "family" | "child" | "guest";
 
+/** Mirrors `WorkspaceKind` / `WorkspaceMembershipRole` (apps/api `schemas/workspace.py`). */
+export type WorkspaceKind = "personal" | "shared";
+
+export type WorkspaceMembershipRole = "owner" | "editor" | "viewer";
+
+export interface WorkspaceRead {
+  id: string;
+  name: string;
+  kind: WorkspaceKind;
+  created_by_id: string;
+  created_at: string;
+  updated_at: string;
+  membership_role: WorkspaceMembershipRole;
+}
+
+/** Mirrors `WorkspaceMemberRead` (apps/api `schemas/invitation.py`). */
+export interface WorkspaceMemberRead {
+  user_id: string;
+  email: string;
+  display_name: string;
+  role: WorkspaceMembershipRole;
+}
+
+export interface WorkspaceCreate {
+  name: string;
+  kind: WorkspaceKind;
+}
+
+/** Mirrors `JoinRequestStatus` / notification payloads (workspace join flow). */
+export type JoinRequestStatus = "pending" | "approved" | "rejected";
+
+export interface UserJoinSummary {
+  id: string;
+  email: string;
+  display_name: string;
+}
+
+/** Mirrors `JoinRequestRead` (apps/api `schemas/join_request.py`). */
+export interface JoinRequestRead {
+  id: string;
+  workspace_id: string;
+  workspace_name: string;
+  status: JoinRequestStatus;
+  created_at: string;
+  requester: UserJoinSummary | null;
+}
+
+export interface JoinRequestNotificationPayload {
+  id: string;
+  workspace_id: string;
+  workspace_name: string;
+  status: JoinRequestStatus;
+  requester: UserJoinSummary;
+}
+
+export interface NotificationRead {
+  id: string;
+  kind: string;
+  title: string;
+  body: string | null;
+  read_at: string | null;
+  created_at: string;
+  join_request: JoinRequestNotificationPayload | null;
+}
+
+export const NOTIFICATION_KIND_JOIN_REQUEST_PENDING = "join_request_pending";
+export const NOTIFICATION_KIND_JOIN_REQUEST_APPROVED = "join_request_approved";
+export const NOTIFICATION_KIND_JOIN_REQUEST_REJECTED = "join_request_rejected";
+
 export interface UserRead {
   id: string;
   email: string;
@@ -46,9 +115,18 @@ export interface AssetVersionRead {
   media_metadata: Record<string, unknown>;
 }
 
+/** Who uploaded the file (same as owner of the asset row). Mirrors `AssetUploaderRead`. */
+export interface AssetUploaderRead {
+  id: string;
+  display_name: string;
+}
+
 export interface AssetRead {
   id: string;
+  workspace_id: string;
   owner_id: string;
+  /** Present when API returns uploader info (older responses may omit). */
+  uploaded_by?: AssetUploaderRead;
   asset_type: AssetType;
   title: string | null;
   description: string | null;
