@@ -1,5 +1,3 @@
-# syntax=docker/dockerfile:1.7
-
 # --- deps stage: install node_modules in an isolated layer ---
 FROM node:20-alpine AS deps
 WORKDIR /app

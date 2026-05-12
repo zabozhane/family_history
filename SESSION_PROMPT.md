@@ -12,6 +12,6 @@ Focus for this session:
 7. Update `.ai/*.json` state only through CLI workflows.
 
 Suggested first tasks:
-- T1 — Establish modular project directory structure
-- T2 — Create Dockerfiles for api, web, and worker apps
-- T3 — Set up docker-compose with PostgreSQL, Redis, and MinIO
+- Read **`SESSION_HANDOFF.md`** for the latest shipped web UX (gallery lightbox + compact upload, timeline filters + lightbox, **`loadQueueAndPlay`**, no auto queue reset on month change).
+- **`textarch.txt`** — краткое описание Docker-сервисов и потоков (если нужен онбординг).
+- Pick the next open item from **`TASKS.md`** (worker **`duration_ms`**, full **`/timeline`**, etc.).

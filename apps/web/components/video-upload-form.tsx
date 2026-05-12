@@ -2,19 +2,18 @@
 
 import { useRef, useState } from "react";
 
-import { ImagePlus } from "lucide-react";
+import { Film } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { ApiRequestError, apiUploadAsset } from "@/lib/api";
 
-export type GalleryUploadFormProps = {
+export type VideoUploadFormProps = {
   onUploaded: () => void;
 };
 
-/** Visibility fixed until we expose UI again — uploads stay private-only in the form. */
 const DEFAULT_SCOPE = "private" as const;
 
-export function GalleryUploadForm({ onUploaded }: GalleryUploadFormProps) {
+export function VideoUploadForm({ onUploaded }: VideoUploadFormProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -24,7 +23,7 @@ export function GalleryUploadForm({ onUploaded }: GalleryUploadFormProps) {
     const input = fileInputRef.current;
     const file = input?.files?.item(0);
     if (!file || file.size === 0) {
-      setError("Choose an image file.");
+      setError("Choose a video file.");
       return;
     }
 
@@ -57,7 +56,7 @@ export function GalleryUploadForm({ onUploaded }: GalleryUploadFormProps) {
         ref={fileInputRef}
         type="file"
         name="file"
-        accept="image/jpeg,image/png,image/gif,image/webp,image/heic"
+        accept="video/mp4,video/quicktime,video/webm,video/*"
         className="sr-only"
         tabIndex={-1}
         aria-hidden
@@ -77,17 +76,15 @@ export function GalleryUploadForm({ onUploaded }: GalleryUploadFormProps) {
           disabled={submitting}
           onClick={() => fileInputRef.current?.click()}
         >
-          <ImagePlus className="h-4 w-4" aria-hidden />
-          Add photo
+          <Film className="h-4 w-4" aria-hidden />
+          Add video
         </Button>
         {pickedLabel ? (
           <span className="max-w-[12rem] truncate text-xs text-muted-foreground" title={pickedLabel}>
             {pickedLabel}
           </span>
         ) : (
-          <span className="text-xs text-muted-foreground">
-            JPEG, PNG, GIF, WebP, HEIC
-          </span>
+          <span className="text-xs text-muted-foreground">MP4, MOV, WebM</span>
         )}
       </div>
 

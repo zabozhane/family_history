@@ -32,7 +32,11 @@ function buildTargetUrl(req: NextRequest, pathSegments: string[]): URL {
   return target;
 }
 
-function forwardHeaders(req: NextRequest, accessToken: string | null): Headers {
+function forwardHeaders(
+  req: NextRequest,
+  accessToken: string | null,
+  pathSegments: string[],
+): Headers {
   const headers = new Headers();
   req.headers.forEach((value, key) => {
     const lower = key.toLowerCase();
@@ -43,6 +47,14 @@ function forwardHeaders(req: NextRequest, accessToken: string | null): Headers {
   });
   if (accessToken) {
     headers.set("Authorization", `Bearer ${accessToken}`);
+  }
+  /** Avoid gzip/br on binary streams — corrupted bodies break `<video>` / `<audio>` through the BFF. */
+  const isAssetFile =
+    pathSegments.length >= 2 &&
+    pathSegments[pathSegments.length - 1] === "file" &&
+    pathSegments.includes("assets");
+  if (isAssetFile) {
+    headers.set("accept-encoding", "identity");
   }
   return headers;
 }
@@ -71,8 +83,9 @@ async function backendFetch(
   req: NextRequest,
   targetUrl: URL,
   accessToken: string | null,
+  pathSegments: string[],
 ): Promise<Response> {
-  const headers = forwardHeaders(req, accessToken);
+  const headers = forwardHeaders(req, accessToken, pathSegments);
   const init: RequestInit & { duplex?: string } = {
     method: req.method,
     headers,
@@ -93,12 +106,12 @@ export async function proxyApiRequest(
   const access = req.cookies.get(FMS_ACCESS_COOKIE)?.value ?? null;
   const refresh = req.cookies.get(FMS_REFRESH_COOKIE)?.value ?? null;
 
-  let backendRes = await backendFetch(req, targetUrl, access);
+  let backendRes = await backendFetch(req, targetUrl, access, pathSegments);
 
   if (backendRes.status === 401 && refresh) {
     const tokens = await refreshTokens(refresh);
     if (tokens) {
-      backendRes = await backendFetch(req, targetUrl, tokens.access_token);
+      backendRes = await backendFetch(req, targetUrl, tokens.access_token, pathSegments);
       const out = await toNextResponse(backendRes);
       applyAuthCookies(out, tokens, req);
       return out;

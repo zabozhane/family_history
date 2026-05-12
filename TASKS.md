@@ -542,3 +542,99 @@ Completion note:
 
 Tested:
 - Python AST parse **`assets.py`** — OK; **`npm run build`** (**`apps/web`**) — OK.
+
+## T22 — Music library: Spotify-style player, multi-upload, delete, filename titles  [DONE]
+Priority: Medium
+Status: Done
+
+Deliver a full **`/music`** experience: compact upload of multiple audio files, bottom player styled like Spotify (transport, scrubbable progress, volume, shuffle/repeat), list rows with icon play/pause and delete with confirmation; **`DELETE /api/v1/assets/{id}`** for owners/admins; default **`Asset.title`** from uploaded filename when the multipart **`title`** field is omitted.
+
+Depends on:
+- T13 (basic music playback)
+- T21 (asset list / file routes stable)
+
+Completion note:
+- **`apps/web`**: **`music-upload-form.tsx`** — compact toolbar (no large card), **`multiple`** file input, sequential **`POST /api/v1/assets`** per file; **`music-player-bar.tsx`** — dark pill UI (**`lucide-react`** icons), hidden native `<audio controls>` replaced by custom scrubber + volume; **`music/page.tsx`** — footer player, shuffle/next randomization when shuffle on, repeat one/all/off, Russian delete confirm modal, row **Play/Pause** + **Trash** icons.
+- **Follow-up (player + dashboard + list UX)**: **`MusicPlayerProvider`** in root **`app/layout.tsx`** (single `<audio>`, playback continues across routes e.g. Music → home/Timeline). **`music-player-context.tsx`**: dock **`fixed`** under main column (`left-[220px]`), bar passes **`durationMsFallback`** from **`primary_version.duration_ms`**, `<audio>` rendered before **`{children}`**; compact **`music-player-bar`**. **`dashboard-shell.tsx`**: **`h-dvh`** + **`overflow-hidden`**, inner pane scroll only; bottom padding when dock visible. **`music/page.tsx`**: denser track rows (`py-2`, smaller buttons/text).
+- **Follow-up (gallery + timeline + player queue)**: **`gallery-lightbox.tsx`**, компактный **`gallery-upload-form`** без выбора visibility (default private); **`gallery/page.tsx`** — лайтбокс, удаление, плотная сетка. **`dashboard-home.tsx`** — узкая полоска месяцев, фильтры Photo/Video/Music/All, видео в месяце, лайтбокс по превью, список музыки месяца без авто-**`replaceQueue`** при смене месяца; **`loadQueueAndPlay`** в **`music-player-context`**. Убран встроенный footer player с главной.
+- **`apps/web/lib/api.ts`**: **`apiDeleteAsset`** (`DELETE` via BFF).
+- **`apps/api`**: **`DELETE /api/v1/assets/{id}`** — delete MinIO keys then **`Asset`** row; **`delete_object`** in **`storage/s3.py`**; **`_resolved_asset_title`** — if **`title`** Form empty, use **`PurePosixPath(filename).stem`** (applies to image/audio/video uploads without explicit title).
+- **`docker-compose.yml`**: **`api`** **`depends_on`** **`minio-init`** **`service_completed_successfully`** (fresh stacks get bucket before API).
+- **`apps/*/Dockerfile`**: removed **`# syntax=docker/dockerfile:1.7`** so builds do not require pulling the Dockerfile frontend image from Docker Hub.
+
+Completion criteria (DoD):
+- Upload several tracks at once; they appear in the list with titles derived from filenames.
+- Play from list or footer; scrub works; delete asks for confirmation and removes track + storage.
+
+Tested:
+- **`npm run typecheck`** in **`apps/web`** — OK (includes follow-up).
+
+## T23 — Dedicated Videos route `/video`  [DONE]
+Priority: Medium
+Status: Done
+
+Add a **Videos** workspace parallel to **Photos**: authenticated **`/video`** page listing **`asset_type === "video"`**, compact upload (**`POST /api/v1/assets`** with video MIME types), grid thumbnails (**`<video preload="metadata">`**), **`GalleryLightbox`** playback, delete with confirmation (**`apiDeleteAsset`**). Expose **Video** in **`DashboardShell`** and gate **`/video`** in middleware like **`/gallery`**.
+
+Depends on:
+- T18 (gallery upload/delete/lightbox patterns)
+- T13 / T22 (asset APIs and BFF auth)
+
+Completion note:
+- **`apps/web/app/(dashboard)/video/page.tsx`** — filter videos, upload toolbar, lightbox, Russian delete modal (same UX as **`/gallery`**).
+- **`apps/web/components/video-upload-form.tsx`** — **`Add video`**, **`accept`** MP4/MOV/WebM + **`video/*`**, default **`permission_scope: private`**.
+- **`apps/web/components/asset-video-thumb.tsx`** — shared square preview; **`dashboard-home.tsx`** imports it instead of an inline **`VideoThumb`**.
+- **`apps/web/components/dashboard-shell.tsx`** — nav **Video** → **`/video`** (between Photos and Music).
+- **`apps/web/middleware.ts`** — **`/video`** in **`PROTECTED_PREFIXES`** and **`matcher`**.
+- **`dashboard-home.tsx`** — empty-month copy links **Gallery** / **Videos** by media filter.
+
+Tested:
+- **`npx tsc --noEmit`** in **`apps/web`** — OK.
+
+## T24 — Dashboard month strip: neutral segmented grid  [DONE]
+Priority: Low
+Status: Done
+
+Replace the **seasonal chevron + emoji** month bar (**T20**) with a calmer control aligned to the rest of the shell: **muted bordered tray**, **12 cells** (grid **6×2** on narrow viewports, **one row** from **`sm`**), **localized short month labels**, selected month uses the same **`primary`** pill treatment as **Photo / Video / Music / All**. Filtering semantics unchanged (**local calendar month**).
+
+Depends on:
+- T20 (year/month selection behavior)
+
+Completion note:
+- **`dashboard-home.tsx`**: removed **`clip-path`** chevrons, **`monthEmoji`**, seasonal gradients; added **`rounded-lg border bg-muted/40`** wrapper + **`grid-cols-6 sm:grid-cols-12`** segment buttons.
+
+Tested:
+- **`npx tsc --noEmit`** in **`apps/web`** — OK.
+
+## T25 — Dashboard All filter: Photo / Video stack + Music sidebar  [DONE]
+Priority: Medium
+Status: Done
+
+When **All** is selected on the home timeline, show **Photo** then **Video** in the **main column**, and **Music** as a **right rail** (scrollable list on large screens). Extract **`DashboardMusicList`** for reuse with the **Music-only** tab. Lightbox order for **All**: **all photos for the month**, then **all videos**; video thumb clicks use **`imagesInRange.length + j`**.
+
+Depends on:
+- T17 / T19 / T22 (dashboard filters + player)
+
+Completion note:
+- **`dashboard-home.tsx`**: **`DashboardMusicList`**; **`lightboxAssets`** / effect bounds; **`monthHasNothing`** empty copy.
+
+Tested:
+- **`npx tsc --noEmit`** in **`apps/web`** — OK.
+
+## T26 — Asset file streaming for HTML5 media + BFF hardening  [DONE]
+Priority: High
+Status: Done
+
+Browsers expect **`Accept-Ranges`** / **`Content-Length`** and often **`Range`** / **`206`** for **`<video>`** progressive playback. Implement ranged reads from S3/MinIO, **`HEAD /{asset_id}/file`**, and avoid corrupting binary streams through the Next BFF (**`Accept-Encoding: identity`** on **`…/assets/…/file`**). Lightbox: **`<source type={mime}>`**, **`onError`** copy for **HEVC/.mov** in Chrome.
+
+Depends on:
+- T10 / T21 (asset file route + versions)
+
+Completion note:
+- **`apps/api/app/storage/s3.py`**: **`head_object_content_length`**, **`iter_object_chunks(..., byte_range=)`**.
+- **`apps/api/app/api/v1/assets.py`**: **`_parse_http_range`**, **`_resolve_asset_file_parts`**, **`HEAD`** + **`GET`** streaming with **206** where applicable.
+- **`apps/web/lib/server/backend-proxy.ts`**: force **`accept-encoding: identity`** for asset **`file`** URLs.
+- **`apps/web/components/gallery-lightbox.tsx`**: video **`source`**, **`preload="metadata"`**, decode hint on error.
+
+Tested:
+- **`python3 -m py_compile`** on touched API modules — OK; **`npx tsc --noEmit`** in **`apps/web`** — OK.
+

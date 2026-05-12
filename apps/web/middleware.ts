@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 
 import { FMS_ACCESS_COOKIE } from "@/lib/cookies";
 
-const PROTECTED_PREFIXES = ["/me", "/gallery", "/music", "/timeline"];
+const PROTECTED_PREFIXES = ["/me", "/gallery", "/video", "/music", "/timeline"];
 
 export function middleware(request: NextRequest) {
   const path = request.nextUrl.pathname;
@@ -25,6 +25,8 @@ export const config = {
     "/me/:path*",
     "/gallery",
     "/gallery/:path*",
+    "/video",
+    "/video/:path*",
     "/music",
     "/music/:path*",
     "/timeline",

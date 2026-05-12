@@ -66,6 +66,11 @@ export async function apiUploadAsset(
   return (await res.json()) as AssetUploadResponse;
 }
 
+/** Owner/admin delete via `DELETE /api/v1/assets/{id}`. */
+export async function apiDeleteAsset(assetId: string): Promise<void> {
+  await apiFetch(`/api/v1/assets/${assetId}`, { method: "DELETE" });
+}
+
 export async function apiFetch<T>(
   path: string,
   init: RequestInit = {},
