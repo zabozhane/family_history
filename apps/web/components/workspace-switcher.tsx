@@ -168,34 +168,38 @@ export function WorkspaceSwitcher() {
                     </span>
                   </button>
                   <div className="flex shrink-0 items-center gap-0.5 self-stretch pr-0.5">
-                    {ws.kind === "shared" ? (
+                    {ws.kind === "shared" && ws.membership_role === "owner" ? (
                       <NotificationsBell
                         workspaceId={ws.id}
                         workspaceName={ws.name}
                       />
                     ) : null}
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon"
-                      className={cn(
-                        "h-7 w-7 shrink-0",
-                        selected
-                          ? "text-accent-foreground hover:bg-accent-foreground/15"
-                          : "text-muted-foreground",
-                      )}
-                      aria-label={`Workspace ID: ${ws.name}`}
-                      aria-expanded={infoOpenId === ws.id}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setInfoOpenId((id) => (id === ws.id ? null : ws.id));
-                      }}
-                    >
-                      <Info className="h-4 w-4" aria-hidden />
-                    </Button>
+                    {ws.membership_role === "owner" && ws.kind === "shared" ? (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className={cn(
+                          "h-7 w-7 shrink-0",
+                          selected
+                            ? "text-accent-foreground hover:bg-accent-foreground/15"
+                            : "text-muted-foreground",
+                        )}
+                        aria-label={`Library details: ${ws.name}`}
+                        aria-expanded={infoOpenId === ws.id}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setInfoOpenId((id) => (id === ws.id ? null : ws.id));
+                        }}
+                      >
+                        <Info className="h-4 w-4" aria-hidden />
+                      </Button>
+                    ) : null}
                   </div>
                 </div>
-                {infoOpenId === ws.id ? (
+                {ws.membership_role === "owner" &&
+                ws.kind === "shared" &&
+                infoOpenId === ws.id ? (
                   <div className="border-t border-border/60 bg-muted/40 px-2 py-2 text-[11px] text-muted-foreground">
                     <p className="mb-1.5 leading-snug">
                       Copy this ID and send it to someone who should{" "}
@@ -231,11 +235,9 @@ export function WorkspaceSwitcher() {
                         Members
                       </Link>
                     </Button>
-                    {ws.membership_role === "owner" ? (
-                      <p className="mt-1.5 text-[10px] leading-snug text-muted-foreground">
-                        As owner you can change roles or remove members on that page.
-                      </p>
-                    ) : null}
+                    <p className="mt-1.5 text-[10px] leading-snug text-muted-foreground">
+                      On the Members page you can change roles or remove people from this library.
+                    </p>
                   </div>
                 ) : null}
               </li>

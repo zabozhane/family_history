@@ -32,6 +32,21 @@ router = APIRouter()
 INVITE_TTL_DAYS = 7
 
 
+async def _require_owner_of_shared_workspace(
+    db: AsyncSession,
+    user: User,
+    workspace_id: UUID,
+) -> Workspace:
+    """Owner-only; **400** if workspace is **personal** (no member roster API)."""
+    ws = await require_workspace_owner(db, user, workspace_id)
+    if ws.kind != WorkspaceKind.shared:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Member management is only available for shared workspaces",
+        )
+    return ws
+
+
 def _normalize_email(email: str) -> str:
     return email.strip().lower()
 
@@ -138,9 +153,7 @@ async def list_workspace_members(
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
 ) -> list[WorkspaceMemberRead]:
-    m = await get_membership(db, user_id=user.id, workspace_id=workspace_id)
-    if m is None:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not a member of this workspace")
+    await _require_owner_of_shared_workspace(db, user, workspace_id)
 
     stmt = (
         select(User.email, User.display_name, WorkspaceMembership.user_id, WorkspaceMembership.role)
@@ -170,7 +183,7 @@ async def update_member_role(
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
 ) -> WorkspaceMemberRead:
-    await require_workspace_owner(db, user, workspace_id)
+    await _require_owner_of_shared_workspace(db, user, workspace_id)
 
     result = await db.execute(
         select(WorkspaceMembership).where(
@@ -208,7 +221,7 @@ async def remove_workspace_member(
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
 ) -> None:
-    await require_workspace_owner(db, user, workspace_id)
+    await _require_owner_of_shared_workspace(db, user, workspace_id)
 
     result = await db.execute(
         select(WorkspaceMembership).where(

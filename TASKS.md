@@ -638,13 +638,13 @@ Completion note:
 Tested:
 - **`python3 -m py_compile`** on touched API modules — OK; **`npx tsc --noEmit`** in **`apps/web`** — OK.
 
-## T27 — Workspaces (tenants), personal vs shared, and scoped asset ACL  [IN PROGRESS]
+## T27 — Workspaces (tenants), personal vs shared, and scoped asset ACL  [DONE]
 Priority: High
-Status: In progress (backend + web switcher landed; optional polish below)
+Status: Done (core shipped; optional polish below)
 
 **Problem (current behavior):** `UserRole.admin` could read **all** assets system-wide (`app/permissions/assets.py`). Other users saw own assets or non-private `permission_scope`. No per-tenant library.
 
-**Goal:** **Workspace** is the library unit; **`Asset.workspace_id`** scopes every asset. Visibility = **workspace membership** only (no global admin bypass for asset APIs). **Roles:** **viewer** read-only; **editor** read + upload + delete **own** assets; **owner** full delete in workspace + manage membership (invite flows → **T28**).
+**Goal:** **Workspace** is the library unit; **`Asset.workspace_id`** scopes every asset. Visibility = **workspace membership** only (no global admin bypass for asset APIs). **Roles:** **viewer** read-only; **editor** read + upload + delete **own** assets; **owner** full delete in workspace + manage membership (invite flows → **T28**; join-by-ID + notifications → **T30**).
 
 **Shipped in repo (session):**
 - **Models:** `Workspace`, `WorkspaceMembership`, `Asset.workspace_id`; **`workspace_tenant_001`** Alembic migration (one **Personal** workspace per existing user, backfill assets).
@@ -653,7 +653,7 @@ Status: In progress (backend + web switcher landed; optional polish below)
 - **Auth:** **`create_personal_workspace_for_user`** on register (after flush).
 - **Web:** **`AssetRead.workspace_id`** in **`lib/types.ts`**.
 
-**Remaining:** optional polish (email delivery for invites, self-remove from workspace).
+**Remaining (optional polish):** transactional email delivery for **T28** invitation links; self-remove from a workspace (leave library) if product needs it.
 
 Depends on:
 - T4 / T9 / T10 / T21
@@ -680,9 +680,9 @@ Completion note:
   - **`GET /api/v1/workspaces/{workspace_id}/invitations`** — pending invites, owner only.
   - **`DELETE /api/v1/workspaces/{workspace_id}/invitations/{invitation_id}`** — revoke, owner only.
   - **`POST /api/v1/invitations/accept`** — body **`{ "token" }`**; burns invite; creates **`WorkspaceMembership`** if needed (matches **`T27`** role semantics).
-  - **`GET /api/v1/workspaces/{workspace_id}/members`** — any member lists roster.
-  - **`PATCH /api/v1/workspaces/{workspace_id}/members/{user_id}`** — owner sets **`viewer`** \| **`editor`** (not owner).
-  - **`DELETE …/members/{user_id}`** — owner removes non-owner members.
+  - **`GET /api/v1/workspaces/{workspace_id}/members`** — owner lists roster for **shared** workspaces only (**400** for personal).
+  - **`PATCH /api/v1/workspaces/{workspace_id}/members/{user_id}`** — owner sets **`viewer`** \| **`editor`** (not owner); **shared** workspaces only (**400** for personal).
+  - **`DELETE …/members/{user_id}`** — owner removes non-owner members; **shared** only (**400** for personal).
 - **`permissions/workspace_acl.py`**: **`require_workspace_owner`**, **`require_workspace_member`**.
 
 Tested:
@@ -699,12 +699,39 @@ Depends on:
 - T27 / T28 (optional)
 
 Completion note:
-- **`WorkspaceProvider`** + **`useWorkspace`** (`apps/web/components/workspace-context.tsx`): lists workspaces, restores **`fms_active_workspace_id`** from **`localStorage`**, **`POST /api/v1/workspaces`** for create.
-- **`WorkspaceSwitcher`** in **`dashboard-shell`**: library list + **+** modal (name + personal/shared).
+- **`WorkspaceProvider`** + **`useWorkspace`** (`apps/web/components/workspace-context.tsx`): lists workspaces, restores **`fms_active_workspace_id`** from **`localStorage`**, **`POST /api/v1/workspaces`** for create; also loads **`GET /api/v1/workspace-join-requests`** (outgoing join requests for **Pending access** block — see **T30**).
+- **`WorkspaceSwitcher`** in **`dashboard-shell`**: library list + **+** modal (create + **Join existing** via workspace UUID); **Info** (UUID + **Members** link) and **NotificationsBell** only for **shared** libraries where **`membership_role === owner`**; **personal** libraries have no Info/Members (**T30**).
 - **`buildAssetsListPath`** (`apps/web/lib/api.ts`) + uploads append **`workspace_id`** on gallery/video/music forms.
 - Dashboard / gallery / video / music / timeline pages pass **`workspace_id`** on asset list + timeline queries.
 - **API:** optional **`workspace_id`** on **`GET /api/v1/timeline`** filters to that library (`timeline.py`).
+- **Web env:** `getBackendBaseUrl()` / **`RUNNING_IN_DOCKER`** so Next BFF reaches **`http://api:8000`** in Compose; session **`login`** / **`register`** routes return **502/503** with safe JSON on proxy failures.
 
 Tested:
 - **`npx tsc --noEmit`** in **`apps/web`** — OK; **`python3 -m compileall`** on touched API — OK.
+
+## T30 — Join requests, notifications, and workspace members UI  [DONE]
+Priority: High
+Status: Done
+
+**Goal:** Users can request access to a **shared** workspace by UUID; **owners** approve or decline with role; both sides see **in-app notifications**. **Owners** manage members (roles / remove) from the web app.
+
+Depends on:
+- T27 / T28 (members API already existed)
+
+Completion note:
+- **Migrations:** **`join_requests_notifications_003`** — `workspace_join_requests`, `notifications` (+ join_request FK); **`notifications_workspace_id_004`** — **`notifications.workspace_id`** for per-library filtering + backfill.
+- **Models / API:**
+  - **`POST /api/v1/workspaces/{id}/join-requests`**, **`GET`** (owner pending list), **`POST …/respond`**, **`DELETE`** (requester cancel); **`GET /api/v1/workspace-join-requests`** — caller’s outgoing requests (all statuses).
+  - **`GET/PATCH/DELETE /api/v1/workspaces/{id}/members`** unchanged from **T28**; used by members page.
+  - **`GET /api/v1/notifications`**, **`PATCH …/notifications/{id}/read`** with optional **`workspace_id`** query for scoped inbox.
+- **Web:**
+  - **`notifications-bell.tsx`**: portal + fixed panel (opaque card + dimmed backdrop); fetches notifications filtered by **`workspace_id`**; approve/decline join requests for owners.
+  - **`workspace-switcher.tsx`**: bell adjacent to Info on **shared** rows only; **Pending access** section for outgoing **pending** requests (clock icon).
+  - **`app/(dashboard)/workspace/[workspaceId]/members/page.tsx`**: **shared + owner-only**; role **select** (viewer/editor) + **Remove** for non-owner rows; **personal** blocked in UI.
+  - Types: **`JoinRequestRead`**, **`WorkspaceMemberRead`**, notification constants in **`lib/types.ts`**.
+- **Compose:** **`web`** service sets **`RUNNING_IN_DOCKER: "true"`** for internal API URL.
+
+Tested:
+- **`docker compose build api web && docker compose up -d`** + **`docker compose exec api alembic upgrade head`** (head includes **`notifications_workspace_id_004`**).
+- **`npx tsc --noEmit`** in **`apps/web`** — OK.
 

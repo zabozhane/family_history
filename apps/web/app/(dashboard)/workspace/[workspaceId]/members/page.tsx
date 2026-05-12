@@ -52,8 +52,6 @@ export default function WorkspaceMembersPage() {
   const [error, setError] = useState<string | null>(null);
   const [actingId, setActingId] = useState<string | null>(null);
 
-  const isOwner = ws?.membership_role === "owner";
-
   const load = useCallback(async () => {
     if (!workspaceId) return;
     setLoading(true);
@@ -87,6 +85,7 @@ export default function WorkspaceMembersPage() {
 
   useEffect(() => {
     if (!ready || !workspaceId || !ws) return;
+    if (ws.membership_role !== "owner" || ws.kind !== "shared") return;
     void load();
   }, [ready, workspaceId, ws, load]);
 
@@ -188,6 +187,47 @@ export default function WorkspaceMembersPage() {
     );
   }
 
+  if (ws.membership_role !== "owner") {
+    return (
+      <main className="mx-auto max-w-2xl px-4 py-8">
+        <Card>
+          <CardHeader>
+            <CardTitle>Members</CardTitle>
+            <CardDescription>
+              Only the library owner can view the workspace ID and manage members.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Button asChild variant="outline">
+              <Link href="/">Back to dashboard</Link>
+            </Button>
+          </CardContent>
+        </Card>
+      </main>
+    );
+  }
+
+  if (ws.kind !== "shared") {
+    return (
+      <main className="mx-auto max-w-2xl px-4 py-8">
+        <Card>
+          <CardHeader>
+            <CardTitle>Members</CardTitle>
+            <CardDescription>
+              Workspace ID and member management apply only to shared libraries. Personal
+              libraries are private to you.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Button asChild variant="outline">
+              <Link href="/">Back to dashboard</Link>
+            </Button>
+          </CardContent>
+        </Card>
+      </main>
+    );
+  }
+
   if (error && members.length === 0 && !loading) {
     return (
       <main className="mx-auto max-w-2xl px-4 py-8">
@@ -228,9 +268,7 @@ export default function WorkspaceMembersPage() {
         </Button>
         <h1 className="mt-2 text-xl font-semibold tracking-tight">{ws.name}</h1>
         <p className="text-sm text-muted-foreground">
-          {isOwner
-            ? "Manage who can view or edit this library."
-            : "People with access to this library."}
+          Manage who can view or edit this library.
         </p>
       </div>
 
@@ -287,7 +325,7 @@ export default function WorkspaceMembersPage() {
                       <span className="rounded-md border border-border bg-muted/50 px-2.5 py-1 text-xs font-medium capitalize">
                         Owner
                       </span>
-                    ) : isOwner ? (
+                    ) : (
                       <>
                         <label className="flex items-center gap-2 text-xs text-muted-foreground">
                           <span className="sr-only">Role</span>
@@ -320,10 +358,6 @@ export default function WorkspaceMembersPage() {
                           </Button>
                         ) : null}
                       </>
-                    ) : (
-                      <span className="rounded-md border border-border bg-muted/30 px-2.5 py-1 text-xs font-medium capitalize">
-                        {m.role}
-                      </span>
                     )}
                   </div>
                 </div>
