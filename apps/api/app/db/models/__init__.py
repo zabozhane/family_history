@@ -15,6 +15,7 @@ from app.db.models.workspace import (
     WorkspaceMembership,
     WorkspaceMembershipRole,
 )
+from app.db.models.workspace_invitation import WorkspaceInvitation
 
 __all__ = [
     "Asset",
@@ -29,4 +30,5 @@ __all__ = [
     "WorkspaceKind",
     "WorkspaceMembership",
     "WorkspaceMembershipRole",
+    "WorkspaceInvitation",
 ]

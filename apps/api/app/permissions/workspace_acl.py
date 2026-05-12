@@ -101,6 +101,45 @@ async def assert_can_read_asset(db: AsyncSession, user: User, asset: Asset) -> N
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Asset not found")
 
 
+async def require_workspace_owner(
+    db: AsyncSession,
+    user: User,
+    workspace_id: UUID,
+) -> Workspace:
+    """Load workspace; **403** if current user is not an **owner** member."""
+    from fastapi import HTTPException, status
+
+    m = await get_membership(db, user_id=user.id, workspace_id=workspace_id)
+    if m is None or m.role != WorkspaceMembershipRole.owner:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Workspace owners only",
+        )
+    result = await db.execute(select(Workspace).where(Workspace.id == workspace_id))
+    ws = result.scalar_one_or_none()
+    if ws is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Workspace not found")
+    return ws
+
+
+async def require_workspace_member(
+    db: AsyncSession,
+    user: User,
+    workspace_id: UUID,
+) -> tuple[Workspace, WorkspaceMembership]:
+    """Load workspace + membership; **403** if not a member."""
+    from fastapi import HTTPException, status
+
+    m = await get_membership(db, user_id=user.id, workspace_id=workspace_id)
+    if m is None:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not a member of this workspace")
+    result = await db.execute(select(Workspace).where(Workspace.id == workspace_id))
+    ws = result.scalar_one_or_none()
+    if ws is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Workspace not found")
+    return ws, m
+
+
 async def assert_can_delete_asset(db: AsyncSession, user: User, asset: Asset) -> None:
     from fastapi import HTTPException, status
 

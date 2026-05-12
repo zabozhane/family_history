@@ -13,6 +13,7 @@ from app.db.base import Base, TimestampMixin, UUIDPKMixin
 if TYPE_CHECKING:
     from app.db.models.asset import Asset
     from app.db.models.user import User
+    from app.db.models.workspace_invitation import WorkspaceInvitation
 
 
 class WorkspaceKind(str, enum.Enum):
@@ -55,6 +56,12 @@ class Workspace(Base, UUIDPKMixin, TimestampMixin):
         "Asset",
         back_populates="workspace",
         passive_deletes=False,
+    )
+    invitations: Mapped[list["WorkspaceInvitation"]] = relationship(
+        "WorkspaceInvitation",
+        back_populates="workspace",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
     )
 
 

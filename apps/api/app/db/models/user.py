@@ -13,6 +13,7 @@ if TYPE_CHECKING:
     from app.db.models.asset import Asset
     from app.db.models.timeline_entry import TimelineEntry
     from app.db.models.workspace import Workspace, WorkspaceMembership
+    from app.db.models.workspace_invitation import WorkspaceInvitation
 
 
 class UserRole(str, enum.Enum):
@@ -60,4 +61,8 @@ class User(Base, UUIDPKMixin, TimestampMixin):
         back_populates="user",
         cascade="all, delete-orphan",
         passive_deletes=True,
+    )
+    workspace_invitations_sent: Mapped[list["WorkspaceInvitation"]] = relationship(
+        "WorkspaceInvitation",
+        back_populates="invited_by",
     )

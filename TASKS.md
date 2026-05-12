@@ -653,7 +653,7 @@ Status: In progress (backend core landed; **T28** invites / **T29** web switcher
 - **Auth:** **`create_personal_workspace_for_user`** on register (after flush).
 - **Web:** **`AssetRead.workspace_id`** in **`lib/types.ts`**.
 
-**Remaining:** invitations, adding members with roles, sidebar workspace UI + passing **`workspace_id`** from browser (**T29**).
+**Remaining:** sidebar workspace UI + passing **`workspace_id`** from browser (**T29**); optional polish (email delivery, self-remove from workspace).
 
 Depends on:
 - T4 / T9 / T10 / T21
@@ -664,20 +664,30 @@ Completion note:
 Tested:
 - **`python3 -m compileall apps/api/app`** — OK; **`npx tsc --noEmit`** in **`apps/web`** — OK.
 
-## T28 — Invitations and member capabilities (read / upload / delete)  [TODO]
+## T28 — Invitations and member capabilities (read / upload / delete)  [DONE]
 Priority: High
-Status: Planned
+Status: Done
 
-**Goal:** Invite users into **shared** workspaces by token/email; refine capabilities beyond fixed roles if needed. Depends on **T27** membership table.
+**Goal:** Invite users into **shared** workspaces by email + opaque token; manage member roles (**viewer** / **editor**); owner-only invitation lifecycle. Invite acceptance requires authenticated user whose **email matches** the invitation.
 
 Depends on:
 - T27
 
 Completion note:
-- _— pending —_
+- **Model:** **`WorkspaceInvitation`** (`workspace_invitations` table); partial unique index on **`(workspace_id, email)`** where **`consumed_at IS NULL`** (migration **`workspace_invitations_002`**).
+- **API:**
+  - **`POST /api/v1/workspaces/{workspace_id}/invitations`** — owner only; **`kind` must be `shared`**; role **`viewer`** \| **`editor`**; returns **`InvitationCreated`** including **`token`** once.
+  - **`GET /api/v1/workspaces/{workspace_id}/invitations`** — pending invites, owner only.
+  - **`DELETE /api/v1/workspaces/{workspace_id}/invitations/{invitation_id}`** — revoke, owner only.
+  - **`POST /api/v1/invitations/accept`** — body **`{ "token" }`**; burns invite; creates **`WorkspaceMembership`** if needed (matches **`T27`** role semantics).
+  - **`GET /api/v1/workspaces/{workspace_id}/members`** — any member lists roster.
+  - **`PATCH /api/v1/workspaces/{workspace_id}/members/{user_id}`** — owner sets **`viewer`** \| **`editor`** (not owner).
+  - **`DELETE …/members/{user_id}`** — owner removes non-owner members.
+- **`permissions/workspace_acl.py`**: **`require_workspace_owner`**, **`require_workspace_member`**.
 
 Tested:
-- _— pending —_
+- **`python3 -m compileall apps/api/app`** — OK.
+- **`docker compose … alembic upgrade head`** — **`workspace_invitations_002`** applied.
 
 ## T29 — Web: active workspace context + sidebar workspace switcher  [TODO]
 Priority: Medium
