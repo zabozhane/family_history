@@ -1,8 +1,9 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
 
-import { Clock, Info, Plus } from "lucide-react";
+import { Clock, Info, Plus, Users } from "lucide-react";
 
 import { NotificationsBell } from "@/components/notifications-bell";
 import { Button } from "@/components/ui/button";
@@ -224,6 +225,17 @@ export function WorkspaceSwitcher() {
                     >
                       {copiedId === ws.id ? "Copied" : "Copy ID"}
                     </Button>
+                    <Button asChild variant="outline" size="sm" className="mt-1.5 h-8 w-full text-xs">
+                      <Link href={`/workspace/${ws.id}/members`}>
+                        <Users className="h-3.5 w-3.5" aria-hidden />
+                        Members
+                      </Link>
+                    </Button>
+                    {ws.membership_role === "owner" ? (
+                      <p className="mt-1.5 text-[10px] leading-snug text-muted-foreground">
+                        As owner you can change roles or remove members on that page.
+                      </p>
+                    ) : null}
                   </div>
                 ) : null}
               </li>

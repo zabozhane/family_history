@@ -17,6 +17,14 @@ export interface WorkspaceRead {
   membership_role: WorkspaceMembershipRole;
 }
 
+/** Mirrors `WorkspaceMemberRead` (apps/api `schemas/invitation.py`). */
+export interface WorkspaceMemberRead {
+  user_id: string;
+  email: string;
+  display_name: string;
+  role: WorkspaceMembershipRole;
+}
+
 export interface WorkspaceCreate {
   name: string;
   kind: WorkspaceKind;
