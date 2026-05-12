@@ -14,6 +14,7 @@ if TYPE_CHECKING:
     from app.db.models.asset import Asset
     from app.db.models.user import User
     from app.db.models.workspace_invitation import WorkspaceInvitation
+    from app.db.models.workspace_join_request import WorkspaceJoinRequest
 
 
 class WorkspaceKind(str, enum.Enum):
@@ -59,6 +60,12 @@ class Workspace(Base, UUIDPKMixin, TimestampMixin):
     )
     invitations: Mapped[list["WorkspaceInvitation"]] = relationship(
         "WorkspaceInvitation",
+        back_populates="workspace",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
+    join_requests: Mapped[list["WorkspaceJoinRequest"]] = relationship(
+        "WorkspaceJoinRequest",
         back_populates="workspace",
         cascade="all, delete-orphan",
         passive_deletes=True,

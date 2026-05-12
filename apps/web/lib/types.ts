@@ -22,6 +22,37 @@ export interface WorkspaceCreate {
   kind: WorkspaceKind;
 }
 
+/** Mirrors `JoinRequestStatus` / notification payloads (workspace join flow). */
+export type JoinRequestStatus = "pending" | "approved" | "rejected";
+
+export interface UserJoinSummary {
+  id: string;
+  email: string;
+  display_name: string;
+}
+
+export interface JoinRequestNotificationPayload {
+  id: string;
+  workspace_id: string;
+  workspace_name: string;
+  status: JoinRequestStatus;
+  requester: UserJoinSummary;
+}
+
+export interface NotificationRead {
+  id: string;
+  kind: string;
+  title: string;
+  body: string | null;
+  read_at: string | null;
+  created_at: string;
+  join_request: JoinRequestNotificationPayload | null;
+}
+
+export const NOTIFICATION_KIND_JOIN_REQUEST_PENDING = "join_request_pending";
+export const NOTIFICATION_KIND_JOIN_REQUEST_APPROVED = "join_request_approved";
+export const NOTIFICATION_KIND_JOIN_REQUEST_REJECTED = "join_request_rejected";
+
 export interface UserRead {
   id: string;
   email: string;

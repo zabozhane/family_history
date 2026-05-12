@@ -15,7 +15,9 @@ from app.db.models.workspace import (
     WorkspaceMembership,
     WorkspaceMembershipRole,
 )
+from app.db.models.notification import Notification
 from app.db.models.workspace_invitation import WorkspaceInvitation
+from app.db.models.workspace_join_request import JoinRequestStatus, WorkspaceJoinRequest
 
 __all__ = [
     "Asset",
@@ -31,4 +33,7 @@ __all__ = [
     "WorkspaceMembership",
     "WorkspaceMembershipRole",
     "WorkspaceInvitation",
+    "WorkspaceJoinRequest",
+    "JoinRequestStatus",
+    "Notification",
 ]

@@ -11,9 +11,11 @@ from app.db.base import Base, TimestampMixin, UUIDPKMixin
 
 if TYPE_CHECKING:
     from app.db.models.asset import Asset
+    from app.db.models.notification import Notification
     from app.db.models.timeline_entry import TimelineEntry
     from app.db.models.workspace import Workspace, WorkspaceMembership
     from app.db.models.workspace_invitation import WorkspaceInvitation
+    from app.db.models.workspace_join_request import WorkspaceJoinRequest
 
 
 class UserRole(str, enum.Enum):
@@ -65,4 +67,16 @@ class User(Base, UUIDPKMixin, TimestampMixin):
     workspace_invitations_sent: Mapped[list["WorkspaceInvitation"]] = relationship(
         "WorkspaceInvitation",
         back_populates="invited_by",
+    )
+    workspace_join_requests_sent: Mapped[list["WorkspaceJoinRequest"]] = relationship(
+        "WorkspaceJoinRequest",
+        foreign_keys="WorkspaceJoinRequest.requester_id",
+        back_populates="requester",
+    )
+    notifications: Mapped[list["Notification"]] = relationship(
+        "Notification",
+        foreign_keys="Notification.recipient_user_id",
+        back_populates="recipient",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
     )
