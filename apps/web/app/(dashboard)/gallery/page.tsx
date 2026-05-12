@@ -15,10 +15,13 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { ApiRequestError, apiDeleteAsset, apiFetch } from "@/lib/api";
+import { ApiRequestError, apiDeleteAsset, apiFetch, buildAssetsListPath } from "@/lib/api";
+import { useWorkspace } from "@/components/workspace-context";
 import type { AssetRead } from "@/lib/types";
 
 export default function GalleryPage() {
+  const { ready, activeWorkspaceId } = useWorkspace();
+
   const [assets, setAssets] = useState<AssetRead[]>([]);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -28,10 +31,18 @@ export default function GalleryPage() {
   const [deleteError, setDeleteError] = useState<string | null>(null);
 
   const reloadAssets = useCallback(async (opts?: { silent?: boolean }) => {
+    if (!activeWorkspaceId) {
+      setAssets([]);
+      if (!opts?.silent) setLoading(false);
+      setLoadError(null);
+      return;
+    }
     if (!opts?.silent) setLoading(true);
     setLoadError(null);
     try {
-      const rows = await apiFetch<AssetRead[]>("/api/v1/assets?limit=200");
+      const rows = await apiFetch<AssetRead[]>(
+        buildAssetsListPath(200, activeWorkspaceId),
+      );
       setAssets(rows.filter((a) => a.asset_type === "image"));
     } catch (err) {
       if (!opts?.silent) {
@@ -46,11 +57,12 @@ export default function GalleryPage() {
     } finally {
       if (!opts?.silent) setLoading(false);
     }
-  }, []);
+  }, [activeWorkspaceId]);
 
   useEffect(() => {
+    if (!ready) return;
     void reloadAssets();
-  }, [reloadAssets]);
+  }, [ready, reloadAssets]);
 
   useEffect(() => {
     if (lightboxIndex === null) return;

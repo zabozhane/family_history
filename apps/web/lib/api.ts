@@ -2,6 +2,16 @@ import type { ApiError, AssetUploadResponse } from "./types";
 
 const PROXY_PREFIX = "/api/fms";
 
+/** `GET /api/v1/assets` with optional workspace filter (T29). */
+export function buildAssetsListPath(
+  limit: number,
+  workspaceId: string | null,
+): string {
+  const sp = new URLSearchParams({ limit: String(limit) });
+  if (workspaceId) sp.set("workspace_id", workspaceId);
+  return `/api/v1/assets?${sp.toString()}`;
+}
+
 /** Maps `/api/v1/...` requests to the Next.js BFF proxy (`/api/fms/v1/...`). */
 export function toProxiedApiPath(path: string): string {
   const trimmed = path.startsWith("/") ? path.slice(1) : path;

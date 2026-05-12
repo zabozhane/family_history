@@ -14,6 +14,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ApiRequestError, apiFetch } from "@/lib/api";
+import { useWorkspace } from "@/components/workspace-context";
 import { assetFileUrl } from "@/lib/media-url";
 import {
   buildTimelineSearchParams,
@@ -80,6 +81,8 @@ function payloadSummary(payload: Record<string, unknown>): string | null {
 }
 
 export default function TimelinePage() {
+  const { ready, activeWorkspaceId } = useWorkspace();
+
   const [committed, setCommitted] = useState<CommittedFilters>(EMPTY_COMMITTED);
   const [items, setItems] = useState<TimelineItemRead[]>([]);
   const itemsRef = useRef(items);
@@ -96,6 +99,14 @@ export default function TimelinePage() {
   const [kind, setKind] = useState<"" | TimelineEntryKind>("");
 
   useEffect(() => {
+    if (!ready) return;
+    if (!activeWorkspaceId) {
+      setItems([]);
+      setLoading(false);
+      setHasMore(false);
+      setError(null);
+      return;
+    }
     let cancelled = false;
     setLoading(true);
     setError(null);
@@ -106,6 +117,7 @@ export default function TimelinePage() {
       to: committed.to,
       assetType: committed.assetType ?? undefined,
       kind: committed.kind ?? undefined,
+      workspaceId: activeWorkspaceId,
     });
     apiFetch<TimelineItemRead[]>(`/api/v1/timeline?${qs}`)
       .then((rows) => {
@@ -131,7 +143,7 @@ export default function TimelinePage() {
     return () => {
       cancelled = true;
     };
-  }, [committed]);
+  }, [committed, ready, activeWorkspaceId]);
 
   function handleApply(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -144,6 +156,7 @@ export default function TimelinePage() {
   }
 
   const handleLoadMore = useCallback(async () => {
+    if (!activeWorkspaceId) return;
     setLoadingMore(true);
     setError(null);
     const offset = itemsRef.current.length;
@@ -154,6 +167,7 @@ export default function TimelinePage() {
       to: committed.to,
       assetType: committed.assetType ?? undefined,
       kind: committed.kind ?? undefined,
+      workspaceId: activeWorkspaceId,
     });
     try {
       const rows = await apiFetch<TimelineItemRead[]>(
@@ -172,7 +186,7 @@ export default function TimelinePage() {
     } finally {
       setLoadingMore(false);
     }
-  }, [committed]);
+  }, [committed, activeWorkspaceId]);
 
   function handleReset() {
     setFromLocal("");

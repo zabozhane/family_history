@@ -2,6 +2,26 @@
 
 export type UserRole = "admin" | "family" | "child" | "guest";
 
+/** Mirrors `WorkspaceKind` / `WorkspaceMembershipRole` (apps/api `schemas/workspace.py`). */
+export type WorkspaceKind = "personal" | "shared";
+
+export type WorkspaceMembershipRole = "owner" | "editor" | "viewer";
+
+export interface WorkspaceRead {
+  id: string;
+  name: string;
+  kind: WorkspaceKind;
+  created_by_id: string;
+  created_at: string;
+  updated_at: string;
+  membership_role: WorkspaceMembershipRole;
+}
+
+export interface WorkspaceCreate {
+  name: string;
+  kind: WorkspaceKind;
+}
+
 export interface UserRead {
   id: string;
   email: string;

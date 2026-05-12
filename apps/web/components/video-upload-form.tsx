@@ -6,6 +6,7 @@ import { Film } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { ApiRequestError, apiUploadAsset } from "@/lib/api";
+import { useWorkspace } from "@/components/workspace-context";
 
 export type VideoUploadFormProps = {
   onUploaded: () => void;
@@ -14,6 +15,8 @@ export type VideoUploadFormProps = {
 const DEFAULT_SCOPE = "private" as const;
 
 export function VideoUploadForm({ onUploaded }: VideoUploadFormProps) {
+  const { activeWorkspaceId, ready } = useWorkspace();
+
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -28,11 +31,16 @@ export function VideoUploadForm({ onUploaded }: VideoUploadFormProps) {
     }
 
     setError(null);
+    if (!ready || !activeWorkspaceId) {
+      setError("Choose a workspace in the sidebar first.");
+      return;
+    }
     setSubmitting(true);
     try {
       const fd = new FormData();
       fd.append("file", file);
       fd.append("permission_scope", DEFAULT_SCOPE);
+      fd.append("workspace_id", activeWorkspaceId);
       await apiUploadAsset(fd);
       if (input) input.value = "";
       setPickedLabel(null);
@@ -73,7 +81,7 @@ export function VideoUploadForm({ onUploaded }: VideoUploadFormProps) {
           variant="outline"
           size="sm"
           className="gap-1.5"
-          disabled={submitting}
+          disabled={submitting || !ready || !activeWorkspaceId}
           onClick={() => fileInputRef.current?.click()}
         >
           <Film className="h-4 w-4" aria-hidden />
@@ -89,7 +97,12 @@ export function VideoUploadForm({ onUploaded }: VideoUploadFormProps) {
       </div>
 
       <div className="flex flex-wrap items-center gap-2 sm:ml-auto">
-        <Button type="button" size="sm" disabled={submitting} onClick={() => void runUpload()}>
+        <Button
+          type="button"
+          size="sm"
+          disabled={submitting || !ready || !activeWorkspaceId}
+          onClick={() => void runUpload()}
+        >
           {submitting ? "Uploading…" : "Upload"}
         </Button>
       </div>

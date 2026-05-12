@@ -640,7 +640,7 @@ Tested:
 
 ## T27 — Workspaces (tenants), personal vs shared, and scoped asset ACL  [IN PROGRESS]
 Priority: High
-Status: In progress (backend core landed; **T28** invites / **T29** web switcher remain)
+Status: In progress (backend + web switcher landed; optional polish below)
 
 **Problem (current behavior):** `UserRole.admin` could read **all** assets system-wide (`app/permissions/assets.py`). Other users saw own assets or non-private `permission_scope`. No per-tenant library.
 
@@ -653,7 +653,7 @@ Status: In progress (backend core landed; **T28** invites / **T29** web switcher
 - **Auth:** **`create_personal_workspace_for_user`** on register (after flush).
 - **Web:** **`AssetRead.workspace_id`** in **`lib/types.ts`**.
 
-**Remaining:** sidebar workspace UI + passing **`workspace_id`** from browser (**T29**); optional polish (email delivery, self-remove from workspace).
+**Remaining:** optional polish (email delivery for invites, self-remove from workspace).
 
 Depends on:
 - T4 / T9 / T10 / T21
@@ -689,9 +689,9 @@ Tested:
 - **`python3 -m compileall apps/api/app`** — OK.
 - **`docker compose … alembic upgrade head`** — **`workspace_invitations_002`** applied.
 
-## T29 — Web: active workspace context + sidebar workspace switcher  [TODO]
+## T29 — Web: active workspace context + sidebar workspace switcher  [DONE]
 Priority: Medium
-Status: Planned
+Status: Done
 
 **Goal:** Sidebar workspace list + **+** new workspace; persist active workspace id; pass **`workspace_id`** from web to API when filtering.
 
@@ -699,8 +699,12 @@ Depends on:
 - T27 / T28 (optional)
 
 Completion note:
-- _— pending —_
+- **`WorkspaceProvider`** + **`useWorkspace`** (`apps/web/components/workspace-context.tsx`): lists workspaces, restores **`fms_active_workspace_id`** from **`localStorage`**, **`POST /api/v1/workspaces`** for create.
+- **`WorkspaceSwitcher`** in **`dashboard-shell`**: library list + **+** modal (name + personal/shared).
+- **`buildAssetsListPath`** (`apps/web/lib/api.ts`) + uploads append **`workspace_id`** on gallery/video/music forms.
+- Dashboard / gallery / video / music / timeline pages pass **`workspace_id`** on asset list + timeline queries.
+- **API:** optional **`workspace_id`** on **`GET /api/v1/timeline`** filters to that library (`timeline.py`).
 
 Tested:
-- _— pending —_
+- **`npx tsc --noEmit`** in **`apps/web`** — OK; **`python3 -m compileall`** on touched API — OK.
 

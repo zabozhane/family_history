@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter
 
-from app.api.v1 import admin, assets, auth, invitation_accept, timeline, users, workspace_sharing, workspaces, workspaces
+from app.api.v1 import admin, assets, auth, invitation_accept, timeline, users, workspace_sharing, workspaces
 
 api_router = APIRouter(prefix="/api/v1")
 
