@@ -1,82 +1,185 @@
-# Family Media System / Digital Memory Platform
+# Family Media System
 
-## Project Idea
-A private, multi-user family media and digital memory platform unifying photos, music, videos, notes, events, and more into a timeline-centered personal cloud system. Everything is an asset, and all assets happen in time, supporting permissions and family-oriented sharing.
+Private, multi-user family media and digital memory platform: photos, music, video, and timeline in a workspace-scoped personal cloud. Every item is an **asset** with versions in object storage; the **timeline** aggregates activity over time with permission-aware access.
 
-## Preferred Stack
-Frontend: Next.js, TypeScript, Tailwind, shadcn/ui; Backend: Python, FastAPI; Database: PostgreSQL; Cache/Queue: Redis; Background Jobs: Dramatiq or Celery; Storage: S3-compatible (MinIO for local); ORM: SQLAlchemy; Auth: JWT + refresh tokens; Media Processing: ffmpeg, Pillow, mutagen; Containerization: Docker, docker-compose
+**Status:** MVP implemented locally via Docker (auth, uploads, metadata worker, gallery/music/video UI, timeline dashboard, workspaces, invitations, join requests, notifications). Task history: [`TASKS.md`](TASKS.md). Architecture: [`ARCHITECTURE.md`](ARCHITECTURE.md).
 
-## Constraints
-- minimal mvp
+## Stack
 
-## Quick Start (local)
-Requires Docker + Docker Compose v2.
+| Layer | Technology |
+| --- | --- |
+| Web | Next.js (App Router), TypeScript, Tailwind, shadcn/ui |
+| API | Python 3.12, FastAPI, SQLAlchemy 2, Alembic |
+| Worker | Dramatiq + Redis |
+| Data | PostgreSQL 16 |
+| Storage | S3-compatible (MinIO locally) |
+| Media | ffmpeg, Pillow, mutagen (worker) |
+| Runtime | Docker Compose |
 
-```bash
-cp .env.example .env             # one-time: copy template (gitignored)
-# Edit `.env` and replace every REPLACE_WITH_* placeholder with random secrets,
-# or paste the bootstrap snippet from the top of `.env.example`.
-docker compose up -d --build     # build + start all services
-docker compose ps                # services + healthchecks
-docker compose down              # stop everything (volumes preserved)
-docker compose down -v           # stop and wipe data volumes
+## Repository layout
+
+```
+apps/
+  api/       FastAPI backend, Alembic migrations
+  web/       Next.js UI + BFF session proxy (`/api/fms/*`, `/api/session/*`)
+  worker/    Dramatiq consumers (metadata extraction)
+infrastructure/   nginx/scripts placeholders for future deploy
+packages/         shared-types, shared-utils (stubs)
+docker-compose.yml
+.env.example      copy to `.env` (gitignored)
 ```
 
-If you rotate `POSTGRES_PASSWORD` after Postgres was already initialized, run `docker compose down -v` before `up` so the DB volume is recreated with the new password.
+## Quick start (local)
 
-After `docker compose down -v` (empty database), run migrations before using the API:
+Requires **Docker** and **Docker Compose v2**.
 
 ```bash
+cp .env.example .env
+# Replace every REPLACE_WITH_* in `.env`, or run the bootstrap snippet at the top of `.env.example`.
+
+docker compose up -d --build
+docker compose exec api alembic upgrade head   # required on first run or after `down -v`
+```
+
+Useful commands:
+
+```bash
+docker compose ps
+docker compose logs -f api          # or worker, web
+docker compose down                 # stop; volumes kept
+docker compose down -v              # stop and wipe DB / Redis / MinIO data
+```
+
+If you change `POSTGRES_PASSWORD` after Postgres was initialized, run `docker compose down -v` before `up` so the volume is recreated.
+
+After `docker compose down -v`, run migrations again before using the API.
+
+Rebuild app images after pulling API/web/worker changes:
+
+```bash
+docker compose build api web worker && docker compose up -d
 docker compose exec api alembic upgrade head
 ```
 
-### Auth (API v1)
-| Method | Path | Description |
-| --- | --- | --- |
-| `POST` | `/api/v1/auth/register` | Create account (role `family`); returns access + refresh tokens |
-| `POST` | `/api/v1/auth/login` | Email + password → tokens |
-| `POST` | `/api/v1/auth/refresh` | Refresh token → new token pair |
-| `GET` | `/api/v1/users/me` | Current user (Bearer access token) |
-| `GET` | `/api/v1/admin/ping` | Example admin-only route (Bearer; live `users.role` in DB) |
-
-### Web (T12a — minimal dev UI; superseded by full T12)
-| Path | Description |
-| --- | --- |
-| `/` | Anonymous landing with links to login / register / me |
-| `/login` | Sign in form |
-| `/register` | Self-service registration (creates `family`-role member) |
-| `/me` | Authenticated profile page (redirects to `/login` without a token) |
+## Services
 
 | Service | URL | Notes |
 | --- | --- | --- |
-| API (FastAPI) | http://localhost:8000 | `GET /health`, OpenAPI at `/docs` |
-| Web (Next.js) | http://localhost:3000 | placeholder home page (T2) |
-| MinIO Console | http://localhost:9001 | login: values of `S3_ACCESS_KEY` / `S3_SECRET_KEY` in `.env` |
-| MinIO S3 API | http://localhost:9000 | bucket `family-media` auto-created |
-| PostgreSQL | localhost:5432 | db/user/password from `.env` (`POSTGRES_*`) |
-| Redis | localhost:6379 | broker for Dramatiq worker |
+| Web | http://localhost:3000 | Dashboard, gallery, music, video |
+| API | http://localhost:8000 | `GET /health`, OpenAPI at `/docs` |
+| MinIO Console | http://localhost:9001 | `S3_ACCESS_KEY` / `S3_SECRET_KEY` from `.env` |
+| MinIO S3 API | http://localhost:9000 | Bucket from `S3_BUCKET` (default `family-media`) |
+| PostgreSQL | localhost:5432 | `POSTGRES_*` in `.env` |
+| Redis | localhost:6379 | Dramatiq broker |
+| Worker | — | No HTTP port; `docker compose logs -f worker` |
 
-The `worker` service is a Dramatiq consumer (no exposed port); inspect with `docker compose logs -f worker`.
+The browser talks to the API through the Next.js BFF (`NEXT_PUBLIC_API_BASE_URL` for client hints; `API_INTERNAL_BASE_URL=http://api:8000` inside Compose). Access tokens are stored in **httpOnly cookies** via `/api/session/login` and `/api/session/register`.
 
-## Goals
-- Establish modular project structure with apps/web/api/worker directories
-- Set up Docker and docker-compose for local development with PostgreSQL, Redis, MinIO
-- Implement core domain models: User, Asset, AssetVersion, TimelineEntry with DB schemas and migrations
-- Build secure JWT-based authentication system with user roles (admin, family member, child, guest)
-- Create upload pipeline skeleton supporting image/audio/video uploads storing metadata and files in object storage
-- Develop foundational timeline model that aggregates assets/events for unified timeline view
-- Develop typed, RESTful, versioned FastAPI backend with OpenAPI docs
-- Implement frontend shell in Next.js with Tailwind supporting authentication, media browsing, and timeline navigation
-- Implement basic media browsing: photo gallery, music playback, timeline filtering
-- Implement permissions system supporting private, family, shared scopes
-- Set up async task processing for media metadata extraction and background jobs
-- Ensure strict typing, environment config, and clean code structure throughout
+## Web UI
+
+| Path | Description |
+| --- | --- |
+| `/` | Landing (guest) or timeline dashboard (signed in) |
+| `/login`, `/register` | Auth |
+| `/gallery` | Photo library + upload |
+| `/video` | Video library + upload |
+| `/music` | Music library, player, upload |
+| `/timeline` | Full timeline view |
+| `/me` | Profile |
+| `/workspace/[workspaceId]/members` | Shared workspace members (owner/member) |
+
+Sidebar **workspace switcher**: personal workspace plus shared workspaces you own or joined. Notifications bell for join-request and invitation events.
+
+Protected routes (`/gallery`, `/video`, `/music`, `/timeline`, `/me`) redirect to `/login` without a session cookie.
+
+## API (`/api/v1`)
+
+OpenAPI: http://localhost:8000/docs
+
+### Auth & users
+
+| Method | Path | Description |
+| --- | --- | --- |
+| `POST` | `/auth/register` | Create account (`family` role) → tokens |
+| `POST` | `/auth/login` | Email + password → tokens |
+| `POST` | `/auth/refresh` | Refresh token → new pair |
+| `GET` | `/users/me` | Current user (Bearer) |
+| `GET` | `/admin/ping` | Admin-only smoke route |
+
+### Assets & timeline
+
+| Method | Path | Description |
+| --- | --- | --- |
+| `POST` | `/assets` | Multipart upload (image / audio / video); optional `workspace_id`, `permission_scope` |
+| `GET` | `/assets` | List/filter assets (workspace-scoped ACL) |
+| `GET` | `/assets/{id}` | Asset metadata |
+| `GET` | `/assets/{id}/file` | Stream file from object storage |
+| `GET` | `/assets/{id}/permission` | Effective permission for caller |
+| `DELETE` | `/assets/{id}` | Delete asset (capability-checked) |
+| `GET` | `/timeline` | Timeline entries for active workspace |
+
+### Workspaces & sharing
+
+| Method | Path | Description |
+| --- | --- | --- |
+| `GET`, `POST` | `/workspaces` | List / create workspaces |
+| `POST` | `/workspaces/{id}/invitations` | Invite by email (capabilities: read / upload / delete) |
+| `GET`, `DELETE` | `/workspaces/{id}/invitations` | List / revoke invitations |
+| `POST` | `/invitations/accept` | Accept invitation token |
+| `GET` | `/workspaces/{id}/members` | Member roster (shared workspaces) |
+| `PATCH`, `DELETE` | `/workspaces/{id}/members/{userId}` | Update capabilities / remove member |
+| `POST` | `/workspaces/{id}/join-requests` | Request to join shared workspace |
+| `GET`, `DELETE`, `POST …/respond` | `/workspaces/{id}/join-requests` | Owner manages requests |
+| `GET` | `/workspace-join-requests` | Caller’s outgoing join requests |
+
+### Notifications
+
+| Method | Path | Description |
+| --- | --- | --- |
+| `GET` | `/notifications` | Inbox (optional `workspace_id`) |
+| `PATCH` | `/notifications/{id}/read` | Mark read |
+
+## Domain model (summary)
+
+- **User** — roles: `admin`, `family`, `child`, `guest`
+- **Workspace** — `personal` (one per user) or `shared`; memberships with per-member capabilities
+- **Asset** / **AssetVersion** — typed media (`image`, `audio`, `video`); files in S3; scopes: `private`, `family`, `shared`
+- **TimelineEntry** — aggregates asset activity for the timeline UI
+- **WorkspaceInvitation**, **WorkspaceJoinRequest**, **Notification**
+
+## Implemented vs planned
+
+**In scope today**
+
+- Dockerized monolith (api + web + worker + postgres + redis + minio)
+- JWT auth, cookie-based web sessions, role checks
+- Upload pipeline, streaming playback, background metadata extraction
+- Gallery, music player, video page, timeline dashboard with time filters
+- Multi-workspace tenancy, invitations, join requests, member management UI
+
+**Out of scope for MVP** (see also original goals below)
+
+- AI / semantic search, microservices, Kubernetes
+- Full transcoding, waveforms, command palette, drag-and-drop uploads
+- Files stored in PostgreSQL
+
+## Related docs
+
+- [`ARCHITECTURE.md`](ARCHITECTURE.md) — components and data flow
+- [`TASKS.md`](TASKS.md) — implementation checklist (T1–T30 done)
+- [`apps/api/README.md`](apps/api/README.md), [`apps/web/README.md`](apps/web/README.md), [`apps/worker/README.md`](apps/worker/README.md) — per-app notes
+
+## Original product goals (reference)
+
+- Modular `apps/web`, `apps/api`, `apps/worker` structure
+- Timeline-centered UX with permissions (private / family / shared)
+- Typed versioned REST API with OpenAPI
+- Async media processing; strict typing and env-based config
 
 ## Non-goals
-- No advanced AI features like embeddings or semantic search in MVP
-- No microservices or Kubernetes orchestration in MVP
-- No full media transcoding, waveform generation, or complex media editing features initially
-- No social networking, enterprise features, or large-scale distributed systems
-- No implementing command palette or drag & drop uploads at MVP
-- No storing files inside the database
-- No overengineering or excessive abstraction beyond modular monolith
+
+- Advanced AI (embeddings, semantic search)
+- Microservices or Kubernetes in MVP
+- Heavy transcoding / editing / social features
+- Command palette or drag-and-drop uploads at MVP
+- Storing blobs in the database
